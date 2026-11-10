@@ -51,7 +51,11 @@ public:
     {
         nch = std::min(nch, kMaxChannels);
         const double target = on ? 1.0 : 0.0;
-        if (mix_ == target) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfloat-equal"
+        const bool steady = mix_ == target;   // exact: the ramp clamps to 0 or 1
+#pragma clang diagnostic pop
+        if (steady) {
             if (!on)
                 for (int ch = 0; ch < nch; ++ch)
                     std::memcpy(io[ch], dry_[static_cast<size_t>(ch)].data(), sizeof(float) * static_cast<size_t>(m));

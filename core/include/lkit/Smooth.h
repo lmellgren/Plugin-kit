@@ -18,7 +18,10 @@ public:
     }
     void setTarget(double t) noexcept { target_ = t; }
     void snap() noexcept { value_ = target_; }
-    bool settled() const noexcept { return value_ == target_; }
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfloat-equal"
+    bool settled() const noexcept { return value_ == target_; }   // exact: settle() snaps
+#pragma clang diagnostic pop
     double value() const noexcept { return value_; }
     double target() const noexcept { return target_; }
     double next() noexcept
