@@ -523,7 +523,24 @@ static int cmdRender(int argc, char** argv)
         r.stim.offset = r.stim.pos;
         std::vector<float> out;
         out.reserve((r.stim.length + nTail) * r.channels);
-        r.render(r.stim.length + nTail, &out);
+        // Optional mid-render change {"at_s": t, "params": {...}}: set at that time, block-aligned, without
+        // waiting for read-back (measures the plugin's own parameter smoothing / settle time).
+        NSDictionary* change = run[@"change"];
+        const size_t total = r.stim.length + nTail;
+        if (change) {
+            size_t at = (size_t)std::llround([change[@"at_s"] doubleValue] * fs);
+            at = std::min(total, at / block * block);
+            r.render(at, &out);
+            NSDictionary* cp = change[@"params"];
+            for (NSString* key in cp)
+                check(AudioUnitSetParameter(u, (AudioUnitParameterID)key.longLongValue, kAudioUnitScope_Global, 0,
+                                            [cp[key] floatValue], 0),
+                      "set parameter (change)");
+            [params addEntriesFromDictionary:cp];
+            r.render(total - at, &out);
+        } else {
+            r.render(total, &out);
+        }
         r.stim.gain = 0.0;
 
         // The setting must not have drifted during the render.
@@ -559,6 +576,7 @@ static int cmdRender(int argc, char** argv)
             @"params_ok" : @(ok),
         } mutableCopy];
         if (run[@"meta"]) meta[@"meta"] = run[@"meta"];
+        if (change) meta[@"change"] = change;
         writeJson(meta, [outDir stringByAppendingPathComponent:[runName stringByAppendingString:@".json"]]);
         fprintf(stderr, "%s %s\n", ok ? "ok  " : "FAIL", runName.UTF8String);
         if (!ok) ++failures;

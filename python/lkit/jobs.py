@@ -14,6 +14,8 @@ Job file (JSON):
   "repeat": 1,                           # measure every setting N times
   "channels": "both"                     # analyse channel 0 (default) and keep the L/R difference
 }
+A setting may carry "change": {"at_s": 1.0, "panel": {...}}: the AU host applies those controls at that time
+during the render (settle-time measurements; use keep_raw to look at the waveform).
 
 Output: <data>/runs/<name>-<timestamp>/  (gitignored)
   <setting>__L<level>[__r<i>].npz   freqs, H1..H5 (complex), ir, latency, settings, plugin
@@ -70,8 +72,14 @@ def build_runs(job: dict, pmap: dict | None) -> list:
             n_rep = int(job.get("repeat", 1))
             for r in range(n_rep):
                 name = f"{s['id']}__L{level_tag(lvl)}" + (f"__r{r}" if n_rep > 1 else "")
-                runs.append({"name": name, "params": au, "gain": 10 ** (lvl / 20),
-                             "meta": {"setting": s, "level_dbfs": lvl, "repeat": r}})
+                run = {"name": name, "params": au, "gain": 10 ** (lvl / 20),
+                       "meta": {"setting": s, "level_dbfs": lvl, "repeat": r}}
+                if s.get("change") and not offline:   # mid-render change (AU host only)
+                    merged = {**s.get("panel", {}), **s["change"]["panel"]}
+                    after = host.to_au_params(merged, pmap) if pmap else dict(au, **s["change"].get("au", {}))
+                    run["change"] = {"at_s": s["change"]["at_s"],
+                                     "params": {k: v for k, v in after.items() if au.get(k) != v}}
+                runs.append(run)
     return runs
 
 

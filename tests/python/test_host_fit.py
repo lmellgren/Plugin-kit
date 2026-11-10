@@ -28,6 +28,15 @@ def test_to_au_params():
         host.to_au_params({"hpf": "60"}, PMAP)
 
 
+def test_list_ids_and_change():
+    pm = {"controls": {"g": {"id": [6, 17], "kind": "linear", "panel": [-80, -20], "au": [0, 1], "flat": -80}}}
+    assert host.to_au_params({"g": -50}, pm) == {"6": 0.5, "17": 0.5}
+    job = {"plugin": "aumf:X:Y", "levels_dbfs": [-30],
+           "settings": [{"id": "s", "panel": {"g": -80}, "change": {"at_s": 1.0, "panel": {"g": -20}}}]}
+    run = build_runs(job, pm)[0]
+    assert run["change"] == {"at_s": 1.0, "params": {"6": 1.0, "17": 1.0}}
+
+
 def test_runs_and_text_job():
     job = {"plugin": "render:/bin/true", "levels_dbfs": [-30, 0], "repeat": 2,
            "settings": [{"id": "a", "panel": {"hpf": "50", "gain": 3}}]}

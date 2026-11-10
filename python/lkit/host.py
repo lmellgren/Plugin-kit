@@ -15,7 +15,8 @@ Parameter maps (tools/maps/<name>.json) translate settings in panel units into A
         "quality":   {"id": 30, "kind": "fixed", "au": 1}}}
 
 kind: linear (panel range -> AU range), selector (label -> AU value), raw (panel value = AU value),
-fixed (always this AU value; not settable from a setting).
+fixed (always this AU value; not settable from a setting). "id" may be a list: the same value is sent to
+every id (e.g. both channels of a dual-channel reference).
 """
 from __future__ import annotations
 
@@ -84,5 +85,6 @@ def to_au_params(setting: dict, pmap: dict) -> dict:
                 au = v
             else:
                 raise ValueError(f"{name}: unknown kind {kind}")
-        out[str(c["id"])] = float(au)
+        for i in (c["id"] if isinstance(c["id"], list) else [c["id"]]):
+            out[str(i)] = float(au)
     return out
