@@ -1,5 +1,6 @@
 // Plugin-kit core tests (no JUCE): linear algebra, half-band resampler, FOH engine, true bypass,
 // smoothing, golden files.
+#include "lkit/Circuit.h"
 #include "lkit/Foh.h"
 #include "lkit/Golden.h"
 #include "lkit/Halfband.h"
@@ -147,6 +148,46 @@ static void testFoh()
     }
 }
 
+static void testCircuit()
+{
+    // The rlc() network built as a netlist: same response as the hand-written state space; then a VCVS
+    // inverting amplifier (gain -Rf/Ri) and a value change.
+    lkit::Circuit<8, 12> c;
+    const int in = c.node(), n1 = c.node(), n2 = c.node(), out = c.node();
+    c.R(in, n1, 600);
+    c.L(n1, n2, 0.05);
+    c.C(n2, out, 100e-9);
+    c.R(out, 0, 10e3);
+    c.C(out, 0, 2e-9);
+    c.setInput(in);
+    c.setOutput(out);
+    CHECK(c.numStates() == 3);
+    lkit::StateSpace<3> ss;
+    CHECK(c.stateSpace(ss));
+    const auto ref = rlc();
+    double worst = 0.0;
+    for (double f : {20.0, 200.0, 711.0, 2000.0, 20000.0})
+        worst = std::max(worst, std::abs(ss.response(f) / ref.response(f) - 1.0));
+    CHECK(worst < 1e-9);
+
+    lkit::Circuit<6, 8> a;
+    const int ai = a.node(), x = a.node(), ao = a.node();
+    const int ri = a.R(ai, x, 10e3);
+    a.R(ao, x, 22e3);
+    a.C(ao, x, 1e-9);
+    a.E(ao, 0, 0, x, 1e7);
+    a.setInput(ai);
+    a.setOutput(ao);
+    lkit::StateSpace<1> s1;
+    CHECK(a.stateSpace(s1));
+    CHECK(std::fabs(std::abs(s1.response(10.0)) - 2.2) < 1e-5);
+    a.setValue(ri, 22e3);
+    CHECK(a.stateSpace(s1));
+    CHECK(std::fabs(std::abs(s1.response(10.0)) - 1.0) < 1e-5);
+    const double fc = 1.0 / (2 * kPi * 22e3 * 1e-9);   // pole of Rf || Cf
+    CHECK(std::fabs(20 * std::log10(std::abs(s1.response(fc))) + 3.0103) < 1e-3);
+}
+
 static void testTrueBypass()
 {
     for (int latency : {0, 1, 37, 600})
@@ -226,6 +267,7 @@ int main()
     testLstsq();
     testHalfband();
     testFoh();
+    testCircuit();
     testTrueBypass();
     testSmoothed();
     testGolden();
