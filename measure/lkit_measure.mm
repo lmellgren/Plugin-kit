@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <dlfcn.h>
+#include <unistd.h>
 #include <string>
 #include <vector>
 
@@ -645,6 +646,10 @@ int main(int argc, char** argv)
         else if (cmd == "probe") rc = cmdProbe(argc, argv);
         else if (cmd == "render") rc = cmdRender(argc, argv);
         if (rc == 2) fprintf(stderr, "error: bad arguments for '%s'\n", cmd.c_str());
-        return rc;
+        // Exit without running static destructors: some plugins (e.g. the Pre 73 reference) abort in
+        // their own teardown at process exit ("mutex lock failed"). All output is written by now.
+        fflush(stdout);
+        fflush(stderr);
+        _exit(rc);
     }
 }
