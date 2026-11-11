@@ -145,6 +145,56 @@ bool lstsq(double (&a)[MaxRows][MaxCols], double (&b)[MaxRows], int rows, int co
 // similarity transforms, then the Francis double-shift QR iteration (the classic EISPACK balanc / elmhes / hqr).
 // re[i] + j im[i]; a complex pair comes out as two adjacent entries with im of opposite sign.
 // dscale (optional) receives the balancing scale D (balanced = D^-1 A D). Returns false if QR fails to converge.
+// Least squares as lstsq(), with A stored by columns (a[col][row]): every inner loop runs over contiguous memory.
+// For the small fits that run while a knob moves. a and b are destroyed.
+template <int MaxCols, int MaxRows>
+bool lstsqColumns(double (&a)[MaxCols][MaxRows], double (&b)[MaxRows], int rows, int cols, double* x) noexcept
+{
+    double scale[MaxCols], diag[MaxCols];
+    for (int j = 0; j < cols; ++j) {
+        double n = 0.0;
+        for (int i = 0; i < rows; ++i) n += a[j][i] * a[j][i];
+        scale[j] = n > 0.0 ? 1.0 / std::sqrt(n) : 1.0;
+        for (int i = 0; i < rows; ++i) a[j][i] *= scale[j];
+    }
+    for (int k = 0; k < cols; ++k) {
+        double* v = a[k];
+        double norm = 0.0;
+        for (int i = k; i < rows; ++i) norm += v[i] * v[i];
+        norm = std::sqrt(norm);
+        if (!(norm > 0.0)) return false;
+        const double alpha = v[k] > 0.0 ? -norm : norm;
+        v[k] -= alpha;
+        double vnorm2 = 0.0;
+        for (int i = k; i < rows; ++i) vnorm2 += v[i] * v[i];
+        if (!(vnorm2 > 0.0)) return false;
+        const double inv = 2.0 / vnorm2;
+        for (int j = k + 1; j < cols; ++j) {
+            double* aj = a[j];
+            double dot = 0.0;
+            for (int i = k; i < rows; ++i) dot += v[i] * aj[i];
+            const double f = inv * dot;
+            for (int i = k; i < rows; ++i) aj[i] -= f * v[i];
+        }
+        double dot = 0.0;
+        for (int i = k; i < rows; ++i) dot += v[i] * b[i];
+        const double f = inv * dot;
+        for (int i = k; i < rows; ++i) b[i] -= f * v[i];
+        diag[k] = alpha;
+    }
+    for (int k = cols - 1; k >= 0; --k) {
+        double acc = b[k];
+        for (int j = k + 1; j < cols; ++j) acc -= a[j][k] * x[j];
+        x[k] = acc / diag[k];
+    }
+    for (int j = 0; j < cols; ++j) x[j] *= scale[j];
+    return true;
+}
+
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wfloat-equal"   // the QR deflation tests are exact compares by design
+#endif
 template <int N>
 bool eigenvalues(const double (&A)[N][N], double (&re)[N], double (&im)[N], double* dscale = nullptr) noexcept
 {
@@ -319,6 +369,10 @@ bool eigenvalues(const double (&A)[N][N], double (&re)[N], double (&im)[N], doub
         if (im[i] < 0.0 && im[i + 1] > 0.0) std::swap(im[i], im[i + 1]), std::swap(re[i], re[i + 1]);
     return true;
 }
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
+#endif
 
 // An orthonormal basis (columns of B) of the K-dimensional null space of M (rank N - K), by Gaussian
 // elimination with complete pivoting. M is destroyed. Returns false if M has fewer than N - K usable pivots.

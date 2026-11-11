@@ -300,6 +300,21 @@ static void testModal()
         for (int l = 0; l < 2; ++l) dx = std::max(dx, std::fabs(x1[i][l] - x2[i][l])), xm = std::max(xm, std::fabs(x1[i][l]));
     std::printf("Modal: physical state carried over to %.1e (relative)\n", dx / xm);
     CHECK(dx <= 1e-10 * xm);
+    {   // the first output after a conversion stays near the circuit's own output C x + D u (no spike from a
+        // fitted output weight the band does not determine; the ridge in refine())
+        auto g = flt;
+        const double u0 = g.kernel().u[0][0];
+        double yc = ss2.D * u0;
+        const auto xp = g.physicalState();
+        for (int i = 0; i < 6; ++i) yc += ss2.C[i] * xp[static_cast<size_t>(i)][0];
+        const double y = g.tick(lkit::d2{0.0, 0.0})[0];
+        std::printf("Modal: first output after a switch %.4f, circuit C x + D u %.4f\n", y, yc);
+        CHECK(std::fabs(y - yc) < 0.5 * (std::fabs(yc) + 0.1));
+        g.zeroPhysicalState();
+        double z = 0.0;
+        for (const auto& v : g.physicalState()) z = std::max(z, std::fabs(v[0]));
+        CHECK(z < 1e-12);
+    }
     // the physical state equals the FOH state of the dense filter run on the same input
     lkit::FohDesigner<6> fd;
     fd.prepare(fs, 1);
