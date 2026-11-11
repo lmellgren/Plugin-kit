@@ -3,6 +3,7 @@
 // state round-trip and version migration, and the Seam components build and paint.
 #include "lkit/juce/ProcessorBase.h"
 #include "lkit/juce/Seam.h"
+#include "lkit/juce/Snapshot.h"
 
 #include <cmath>
 #include <cstdio>
@@ -299,6 +300,31 @@ static void testEncoderCells()
     CHECK(stepped.control().text() == "c");
 }
 
+// Snapshot helpers (lkit/juce/Snapshot.h): set a plain value, feed a tone, write the editor to a PNG.
+class ToyWithEditor final : public lkit::ProcessorBase {
+public:
+    ToyWithEditor() : ProcessorBase({"ToyE", "TOYE", 1, "on", "", "output", 0.0}, layout()) {}
+    int prepareCore(double, int, int) override { return 0; }
+    void processCore(float* const*, int, int) noexcept override {}
+    juce::AudioProcessorEditor* createEditor() override { return new juce::GenericAudioProcessorEditor(*this); }
+    bool hasEditor() const override { return true; }
+};
+
+static void testSnapshot()
+{
+    ToyWithEditor p;
+    CHECK(lkit::setPlain(p, "drive", 6.0f));
+    CHECK(std::abs(p.raw("drive") - 6.0f) < 1e-4f);
+    CHECK(!lkit::setPlain(p, "nope", 1.0f));
+    lkit::feedTone(p, 48000.0, 256, 0.2f, 0.5f, 4);
+    const auto f = juce::File::getSpecialLocation(juce::File::tempDirectory).getChildFile("lkit_snapshot_test.png");
+    CHECK(lkit::writeEditorSnapshot(p, f.getFullPathName(), 1.0f, 20));
+    CHECK(f.existsAsFile() && f.getSize() > 100);
+    auto img = juce::ImageFileFormat::loadFrom(f);
+    CHECK(img.isValid() && img.getWidth() > 10);
+    f.deleteFile();
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -308,6 +334,7 @@ int main()
     testState();
     testSeamComponents();
     testEncoderCells();
+    testSnapshot();
     if (failures == 0) std::puts("all kit JUCE tests passed");
     return failures == 0 ? 0 : 1;
 }

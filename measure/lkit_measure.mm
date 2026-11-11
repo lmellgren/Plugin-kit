@@ -10,6 +10,8 @@
 //   lkit_measure params --plugin SPEC [--json FILE]      (alias: --list-params)
 //   lkit_measure probe  --plugin SPEC --param ID --values v1,v2,... [--json FILE]
 //   lkit_measure render --plugin SPEC --job JOB.json --out DIR
+//     job keys: sample_rate, block_size, settle_s, preroll_s, tail_s, stimulus, base_params, runs[{name, params,
+//     gain, change, meta}], watch [ids: output parameters (meters) read once per recorded block -> NAME.json "watch"]
 //
 // Effects of type aufx (effect) and aumf (music effect) are both searched.
 //
@@ -332,6 +334,15 @@ struct Renderer {
     Stimulus stim;
     double sampleTime = 0;
     std::vector<std::vector<float>> buf;
+    // Optional: output parameters (meters, e.g. a gain-reduction meter) read once per block while the
+    // output is recorded; one row per block, one column per id.
+    std::vector<AudioUnitParameterID> watch;
+    std::vector<std::vector<float>> watched;
+    // Run the main run loop for one block's duration per block, i.e. render in real time with the message thread
+    // running, as a host plays: plugins that apply parameter changes on a main-thread timer see a mid-render change
+    // only then (offline rendering is far faster than real time).
+    bool pumpRunLoop = false;
+    double fs = 48000.0;
 
     // Render n samples; if out != nullptr append interleaved output.
     void render(size_t n, std::vector<float>* out)
@@ -354,6 +365,16 @@ struct Renderer {
                 for (UInt32 i = 0; i < m; ++i)
                     for (UInt32 c = 0; c < channels; ++c)
                         out->push_back(static_cast<float*>(abl.b[c].mData)[i]);
+            if (out && !watch.empty()) {
+                std::vector<float> row;
+                for (AudioUnitParameterID id : watch) {
+                    Float32 v = NAN;
+                    AudioUnitGetParameter(u, id, kAudioUnitScope_Global, 0, &v);
+                    row.push_back(v);
+                }
+                watched.push_back(std::move(row));
+            }
+            if (pumpRunLoop) CFRunLoopRunInMode(kCFRunLoopDefaultMode, m / fs, false);
             sampleTime += m;
             stim.pos += m;
             done += m;
@@ -393,6 +414,7 @@ static void openSession(Session& s, NSString* spec, double fs, UInt32 block)
           "max frames");
     s.r.u = u;
     s.r.channels = channels;
+    s.r.fs = fs;
     s.r.block = block;
     s.r.buf.assign(channels, std::vector<float>(block));
     AURenderCallbackStruct cb = {inputCallback, &s.r.stim};
@@ -526,18 +548,39 @@ static int cmdRender(int argc, char** argv)
         // Optional mid-render change {"at_s": t, "params": {...}}: set at that time, block-aligned, without
         // waiting for read-back (measures the plugin's own parameter smoothing / settle time).
         NSDictionary* change = run[@"change"];
+        int changeAppliedBlock = -1;
+        r.watch.clear();
+        r.watched.clear();
+        for (NSNumber* id in (job[@"watch"] ?: @[])) r.watch.push_back((AudioUnitParameterID)id.unsignedIntValue);
         const size_t total = r.stim.length + nTail;
         if (change) {
             size_t at = (size_t)std::llround([change[@"at_s"] doubleValue] * fs);
             at = std::min(total, at / block * block);
             r.render(at, &out);
             NSDictionary* cp = change[@"params"];
-            for (NSString* key in cp)
-                check(AudioUnitSetParameter(u, (AudioUnitParameterID)key.longLongValue, kAudioUnitScope_Global, 0,
-                                            [cp[key] floatValue], 0),
-                      "set parameter (change)");
+            auto send = [&] {
+                for (NSString* key in cp)
+                    check(AudioUnitSetParameter(u, (AudioUnitParameterID)key.longLongValue, kAudioUnitScope_Global, 0,
+                                                [cp[key] floatValue], 0),
+                          "set parameter (change)");
+            };
+            send();
             [params addEntriesFromDictionary:cp];
-            r.render(total - at, &out);
+            // Some plugins apply a set asynchronously on the main thread and may drop it while busy: keep the
+            // run loop going and re-send every 4 blocks until it reads back (at most 1 s), as a host would.
+            r.pumpRunLoop = true;
+            size_t done = at;
+            int appliedBlock = -1;
+            NSMutableDictionary* tmp = [NSMutableDictionary dictionary];
+            for (int b = 0; done < total; ++b) {
+                if (appliedBlock < 0 && checkParams(u, cp, tmp)) appliedBlock = b;
+                if (appliedBlock < 0 && b > 0 && b % 4 == 0 && (double)b * block < fs) send();
+                const size_t m = std::min<size_t>(block, total - done);
+                r.render(m, &out);
+                done += m;
+            }
+            r.pumpRunLoop = false;
+            changeAppliedBlock = appliedBlock;
         } else {
             r.render(total, &out);
         }
@@ -576,7 +619,19 @@ static int cmdRender(int argc, char** argv)
             @"params_ok" : @(ok),
         } mutableCopy];
         if (run[@"meta"]) meta[@"meta"] = run[@"meta"];
-        if (change) meta[@"change"] = change;
+        if (change) {
+            meta[@"change"] = change;
+            meta[@"change_applied_block"] = @(changeAppliedBlock);   // blocks after the change until it read back
+        }
+        if (!r.watch.empty()) {   // {"<id>": [value per block]}, blocks of block_size from the recording's start
+            NSMutableDictionary* w = [NSMutableDictionary dictionary];
+            for (size_t j = 0; j < r.watch.size(); ++j) {
+                NSMutableArray* col = [NSMutableArray arrayWithCapacity:r.watched.size()];
+                for (const auto& row : r.watched) [col addObject:@(row[j])];
+                w[[NSString stringWithFormat:@"%u", r.watch[j]]] = col;
+            }
+            meta[@"watch"] = w;
+        }
         writeJson(meta, [outDir stringByAppendingPathComponent:[runName stringByAppendingString:@".json"]]);
         fprintf(stderr, "%s %s\n", ok ? "ok  " : "FAIL", runName.UTF8String);
         if (!ok) ++failures;

@@ -75,7 +75,7 @@ if(LKIT_BUILD_TESTS)
   if(LKIT_BUILD_JUCE)
     juce_add_console_app(LkitJuceTests PRODUCT_NAME "lkit_juce_tests")
     target_sources(LkitJuceTests PRIVATE tests/cpp/test_juce.cpp)
-    target_compile_definitions(LkitJuceTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+    target_compile_definitions(LkitJuceTests PRIVATE JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0 JUCE_MODAL_LOOPS_PERMITTED=1)
     target_link_libraries(LkitJuceTests PRIVATE lkit_juce lkit_seam juce::juce_audio_processors juce::juce_gui_basics
                                                 juce::juce_recommended_config_flags)
     lkit_seam_tokens(LkitJuceTests)

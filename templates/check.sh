@@ -17,13 +17,15 @@ step() { print -P "%F{cyan}== $1%f" }
 step "configure + build"
 cmake -S . -B "$BUILD" -DJUCE_DIR="$JUCE_DIR" >/dev/null
 cmake --build "$BUILD" -j 10 >/dev/null
-step "ctest"
-ctest --test-dir "$BUILD" --output-on-failure
 ART="$BUILD/plugin/${PLUGIN_TARGET}_artefacts/Release"
-step "install AU to ~/Library/Audio/Plug-Ins/Components (for auval)"
+# before ctest: an AU host finds the component through the system registry, so host tests and auval see this
+# build only once it is installed (Pre 73 lesson)
+step "install AU to ~/Library/Audio/Plug-Ins/Components (host tests, auval)"
 rm -rf "$HOME/Library/Audio/Plug-Ins/Components/$PRODUCT.component"
 cp -R "$ART/AU/$PRODUCT.component" "$HOME/Library/Audio/Plug-Ins/Components/"
 killall -9 AudioComponentRegistrar 2>/dev/null || true
+step "ctest"
+ctest --test-dir "$BUILD" --output-on-failure
 step "auval"
 auval -v ${=AU_CODES} | tail -3 | grep -q "AU VALIDATION SUCCEEDED" || { auval -v ${=AU_CODES} | tail -40; exit 1; }
 print "auval: AU VALIDATION SUCCEEDED"
