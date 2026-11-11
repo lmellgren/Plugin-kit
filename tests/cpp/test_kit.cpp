@@ -1,10 +1,11 @@
 // Plugin-kit core tests (no JUCE): linear algebra, half-band resampler, FOH engine, true bypass,
-// smoothing, golden files.
+// smoothing, golden files, loudness.
 #include "lkit/Circuit.h"
 #include "lkit/Foh.h"
 #include "lkit/Golden.h"
 #include "lkit/Halfband.h"
 #include "lkit/LinAlg.h"
+#include "lkit/Loudness.h"
 #include "lkit/Modal.h"
 #include "lkit/Smooth.h"
 #include "lkit/TrueBypass.h"
@@ -449,6 +450,20 @@ static void testGolden()
     fs::remove_all(dir);
 }
 
+static void testLoudness()
+{
+    using namespace lkit::loudness;
+    CHECK(std::fabs(pinkKWeightedDb([](double) { return 1.0; })) < 1e-12);
+    CHECK(std::fabs(pinkKWeightedDb([](double) { return 4.0; }) - 10.0 * std::log10(4.0)) < 1e-9);   // +6 dB everywhere
+    // K-weighting: +4 dB shelf above about 1.7 kHz, RLB high-pass at 38 Hz
+    CHECK(std::fabs(10.0 * std::log10(kWeightingPower(10000.0)) - 4.0) < 0.1);
+    CHECK(10.0 * std::log10(kWeightingPower(20.0)) < -4.0);
+    // the same +12 dB boost counts more above 2 kHz than below 100 Hz
+    const double hi = pinkKWeightedDb([](double f) { return f > 2000.0 ? 15.85 : 1.0; });
+    const double lo = pinkKWeightedDb([](double f) { return f < 100.0 ? 15.85 : 1.0; });
+    CHECK(hi > lo + 3.0);
+}
+
 int main()
 {
     testExpm();
@@ -461,6 +476,7 @@ int main()
     testTrueBypass();
     testSmoothed();
     testGolden();
+    testLoudness();
     if (failures == 0) std::puts("all kit tests passed");
     return failures == 0 ? 0 : 1;
 }

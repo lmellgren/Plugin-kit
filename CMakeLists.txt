@@ -60,7 +60,8 @@ if(LKIT_BUILD_JUCE)
 
   juce_add_console_app(LkitVst3Render PRODUCT_NAME "lkit_vst3render")
   target_sources(LkitVst3Render PRIVATE tools/vst3render/vst3render.cpp)
-  target_compile_definitions(LkitVst3Render PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0)
+  target_compile_definitions(LkitVst3Render PRIVATE JUCE_PLUGINHOST_VST3=1 JUCE_PLUGINHOST_AU=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
+    JUCE_MODAL_LOOPS_PERMITTED=1)
   target_link_libraries(LkitVst3Render PRIVATE juce::juce_audio_processors juce::juce_recommended_config_flags "-framework CoreAudioKit")
 endif()
 

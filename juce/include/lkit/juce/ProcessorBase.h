@@ -45,8 +45,13 @@ public:
     virtual void updateCore() noexcept {}
     // Audio thread: process m <= maxBlock samples in place (the wet path).
     virtual void processCore(float* const* io, int numChannels, int m) noexcept = 0;
-    // Message thread: the static Auto Gain for the current parameters, in dB.
+    // Message thread: the static Auto Gain for the current parameters, in dB (the expensive part, e.g. an EQ
+    // curve's loudness; recomputed asynchronously after a parameter change and at prepare).
     virtual double computeAutoGainDb() const { return 0.0; }
+    // Audio thread, once per host block: the cheap part of the static gain, in dB, so it follows automation
+    // sample-accurately to the block (also in offline renders, where the message thread may lag). autoGainOn tells
+    // which: e.g. a drive step's compensation when on, its uncompensated level when off. Must not allocate or lock.
+    virtual double blockGainDb(bool /*autoGainOn*/) const noexcept { return 0.0; }
     // Bring an older saved state up to date (called before it replaces the current state).
     virtual void migrateState(juce::ValueTree& /*state*/, int /*fromVersion*/) {}
 
@@ -79,6 +84,9 @@ public:
     float takePeak(int ch) noexcept { return meter_.take(ch); }
     // The Auto Gain applied now (0 dB when Auto Gain or the module is off).
     float autoGainDb() const noexcept;
+    // The static gain applied now: blockGainDb plus, when Auto Gain is on, the computed Auto Gain (0 dB when the
+    // module is off).
+    float staticGainDb() const noexcept;
     bool isOn() const noexcept { return pOn_->load() > 0.5f; }
 
 protected:
@@ -96,6 +104,7 @@ private:
     std::atomic<float>* pAutoGain_ = nullptr;
     std::atomic<float>* pOutput_ = nullptr;
     std::atomic<float> autoGainTargetDb_{0.0f};
+    double gainTarget() const noexcept;
     TrueBypass bypass_;
     Smoothed gain_, trim_;
     PeakMeter meter_;

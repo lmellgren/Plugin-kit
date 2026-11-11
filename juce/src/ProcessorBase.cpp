@@ -46,9 +46,21 @@ float ProcessorBase::autoGainDb() const noexcept
     return autoGainTargetDb_.load();
 }
 
+float ProcessorBase::staticGainDb() const noexcept
+{
+    if (!isOn()) return 0.0f;
+    return static_cast<float>(20.0 * std::log10(gainTarget()));
+}
+
 void ProcessorBase::refreshAutoGain()
 {
     autoGainTargetDb_.store(static_cast<float>(computeAutoGainDb()));
+}
+
+double ProcessorBase::gainTarget() const noexcept
+{
+    const bool ag = pAutoGain_ != nullptr && pAutoGain_->load() > 0.5f;
+    return dbToGain((ag ? static_cast<double>(autoGainTargetDb_.load()) : 0.0) + blockGainDb(ag));
 }
 
 void ProcessorBase::prepareToPlay(double sampleRate, int samplesPerBlock)
@@ -60,8 +72,7 @@ void ProcessorBase::prepareToPlay(double sampleRate, int samplesPerBlock)
     setLatencySamples(latency);
     bypass_.prepare(sampleRate, maxChunk_, latency, isOn());
     refreshAutoGain();
-    const bool ag = pAutoGain_ != nullptr && pAutoGain_->load() > 0.5f;
-    gain_.prepare(sampleRate, 0.050, ag ? dbToGain(autoGainTargetDb_.load()) : 1.0);
+    gain_.prepare(sampleRate, 0.050, gainTarget());
     trim_.prepare(sampleRate, 0.020, pOutput_ != nullptr ? dbToGain(pOutput_->load()) : 1.0);
     coreIdle_ = false;
 }
@@ -88,8 +99,7 @@ void ProcessorBase::processBlock(juce::AudioBuffer<float>& buffer, juce::MidiBuf
     if (n == 0 || nch == 0 || maxChunk_ == 0) return;
 
     const bool on = isOn();
-    const bool ag = pAutoGain_ != nullptr && pAutoGain_->load() > 0.5f;
-    gain_.setTarget(ag ? dbToGain(autoGainTargetDb_.load()) : 1.0);
+    gain_.setTarget(gainTarget());
     trim_.setTarget(pOutput_ != nullptr ? dbToGain(pOutput_->load()) : 1.0);
     updateCore();
 

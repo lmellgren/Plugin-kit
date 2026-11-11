@@ -4,6 +4,7 @@
 #include "lkit/juce/ProcessorBase.h"
 #include "lkit/juce/Seam.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <random>
@@ -54,10 +55,12 @@ public:
         }
     }
     double computeAutoGainDb() const override { return -raw("drive"); }   // compensate the drive
+    double blockGainDb(bool on) const noexcept override { return on ? 0.0 : gainOff; }
     void migrateState(juce::ValueTree& st, int from) override { migratedFrom = from; (void)st; }
     juce::AudioProcessorEditor* createEditor() override { return nullptr; }
     bool hasEditor() const override { return false; }
     int migratedFrom = 0;
+    double gainOff = 0.0;
 
 private:
     std::array<std::array<float, 7>, 2> line_{};
@@ -165,6 +168,19 @@ static void testGains()
     // Auto Gain off: +6 dB trim only
     p.setPlain("autoGain", 0.0f);
     CHECK(p.autoGainDb() == 0.0f);
+    CHECK(p.staticGainDb() == 0.0f);
+    // Auto Gain off with a gain-off value (an uncompensated drive): -12 dB, +6 dB trim -> out = 0.5 x 0.5 x (in)
+    Toy q;
+    q.gainOff = -12.0;
+    q.setPlain("output", 6.0f);
+    q.setPlain("autoGain", 0.0f);
+    q.prepareToPlay(48000.0, 512);
+    CHECK(std::fabs(q.staticGainDb() + 12.0f) < 1e-4f);
+    run(q, 2, 512, 4096, in, out);
+    err = 0.0;
+    const double g = std::pow(10.0, -6.0 / 20.0);
+    for (int i = 100; i < 4096; ++i) err = std::max(err, std::fabs(out[0][static_cast<size_t>(i)] - 0.5 * g * in[0][static_cast<size_t>(i - 7)]));
+    CHECK(err < 1e-5);
 }
 
 static void testState()
@@ -219,6 +235,70 @@ static void testSeamComponents()
     CHECK(seg.preferredWidth() > 70.0f);
 }
 
+static void testEncoderCells()
+{
+    using namespace lkit::seamui;
+    Toy p;
+    ValueTip tip;
+    juce::Component host;
+    host.setSize(500, 400);
+    host.addChildComponent(tip);
+    auto& st = p.state();
+    auto& step = *st.getParameter("step");    // 3 positions, default b
+    auto& drive = *st.getParameter("drive");  // continuous 0..12
+    ScaleKnob::Style ss;
+    ss.kind = ScaleKnob::Kind::stepped;
+    ss.labels = {"a", "b", "c"};
+    ss.name = "Step";
+    ScaleKnob stepped(step, {"", "Step", "Step"}, ss, tip);
+    ScaleKnob::Style bs;
+    bs.name = "Drive";
+    bs.unit = "dB";
+    ScaleKnob bi(drive, {"high", "", "High"}, bs, tip);
+    DualKnob dual(step, drive, {"mid", "", "Mid"}, {"Off", "x", "y"}, "kHz", "Mid frequency", "Mid gain", tip);
+    for (juce::Component* c : std::initializer_list<juce::Component*>{&stepped, &bi, &dual}) {
+        host.addAndMakeVisible(c);
+        c->setBounds(0, 0, 126, 156);
+    }
+    CHECK(host.createComponentSnapshot(host.getLocalBounds()).isValid());
+    CHECK(!eqGlyph("mid").isEmpty() && eqGlyph("nope").isEmpty());
+    // stepped: clicking a printed label jumps to it; one step per 16 pt of drag; arrow keys one step
+    CHECK(stepped.control().index() == 1);
+    const juce::Point<float> labelC = [&] {
+        for (int y = 0; y < 156; ++y)
+            for (int x = 0; x < 126; ++x)
+                if (stepped.labelAt({float(x), float(y)}) == 2) return juce::Point<float>(float(x), float(y));
+        return juce::Point<float>(-1, -1);
+    }();
+    CHECK(labelC.x >= 0.0f);
+    stepped.control().begin();
+    stepped.control().setIndex(stepped.labelAt(labelC));
+    stepped.control().end();
+    CHECK(juce::roundToInt(p.raw("step")) == 2);
+    stepped.control().begin();
+    stepped.control().drag(-33.0f, false);   // two steps down
+    stepped.control().end();
+    CHECK(juce::roundToInt(p.raw("step")) == 0);
+    stepped.keyPressed(juce::KeyPress(juce::KeyPress::upKey));
+    CHECK(juce::roundToInt(p.raw("step")) == 1);
+    // continuous: arrow 0.5, Option 0.1; double-click default
+    bi.keyPressed(juce::KeyPress(juce::KeyPress::upKey));
+    CHECK(std::fabs(p.raw("drive") - 0.5f) < 1e-4f);
+    bi.keyPressed(juce::KeyPress(juce::KeyPress::upKey, juce::ModifierKeys::altModifier, 0));
+    CHECK(std::fabs(p.raw("drive") - 0.6f) < 1e-4f);
+    bi.control().reset();
+    CHECK(p.raw("drive") == 0.0f);
+    // dual: hit zones (inner knob = gain, ring and scale = frequency, outside = none)
+    CHECK(dual.partAt({63.0f, 70.0f}) == DualKnob::Part::knob);
+    CHECK(dual.partAt({63.0f, 70.0f - 25.0f}) == DualKnob::Part::ring);
+    CHECK(dual.partAt({2.0f, 150.0f}) == DualKnob::Part::none);
+    dual.keyPart(DualKnob::Part::knob, 1, false);
+    CHECK(std::fabs(p.raw("drive") - 0.5f) < 1e-4f);
+    dual.keyPart(DualKnob::Part::ring, 1, false);
+    CHECK(juce::roundToInt(p.raw("step")) == 2);
+    CHECK(stepped.control().text() == "c");
+}
+
 int main()
 {
     juce::ScopedJuceInitialiser_GUI gui;
@@ -227,6 +307,7 @@ int main()
     testGains();
     testState();
     testSeamComponents();
+    testEncoderCells();
     if (failures == 0) std::puts("all kit JUCE tests passed");
     return failures == 0 ? 0 : 1;
 }

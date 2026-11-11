@@ -56,6 +56,9 @@ int main(int argc, char** argv)
                         ok = false;
                     }
                 }
+            // as a DAW: the message loop runs between setting parameters and playing (asynchronous parameter work, e.g.
+            // a static Auto Gain, happens there)
+            juce::MessageManager::getInstance()->runDispatchLoopUntil(50);
             inst->prepareToPlay(fs, block);
             const double gain = run.getProperty("gain", 1.0);
             juce::AudioBuffer<float> buf(2, block);

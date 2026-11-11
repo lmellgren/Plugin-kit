@@ -1,6 +1,7 @@
 #include "lkit/juce/Seam.h"
 
 #include <cmath>
+#include <map>
 
 namespace lkit::seamui {
 namespace {
@@ -55,7 +56,7 @@ juce::Font font(float sizePx, int weight)
 juce::Font font(const seam::TextStyle& st) { return font(st.size, st.weight); }
 
 // ---- ValueTip --------------------------------------------------------------------------------
-void ValueTip::show(juce::Component& anchor, const juce::String& text)
+void ValueTip::show(juce::Component& anchor, const juce::String& text, float y)
 {
     text_ = text;
     if (text.isEmpty()) {
@@ -66,7 +67,7 @@ void ValueTip::show(juce::Component& anchor, const juce::String& text)
     if (parent == nullptr) return;
     const auto a = parent->getLocalArea(&anchor, anchor.getLocalBounds()).toFloat();
     const float w = textWidth(font(type::micro), text) + 12.0f, h = 16.0f;
-    setBounds(juce::Rectangle<float>(a.getCentreX() - w / 2, a.getY() + 22.0f, w, h).toNearestInt());
+    setBounds(juce::Rectangle<float>(a.getCentreX() - w / 2, a.getY() + y, w, h).toNearestInt());
     setVisible(true);
     toFront(false);
     repaint();
@@ -441,13 +442,13 @@ void Meter::paint(juce::Graphics& g)
 }
 
 // ---- Header ----------------------------------------------------------------------------------
-Header::Header(juce::RangedAudioParameter& on, juce::String title)
+Header::Header(juce::RangedAudioParameter& on, juce::String title, bool titleLeft)
     : att_(on, [this](float v) {
           on_ = v > 0.5f;
           repaint();
           if (onChange) onChange();
       }),
-      title_(std::move(title))
+      title_(std::move(title)), titleLeft_(titleLeft)
 {
     setTitle(title_);
     att_.sendInitialUpdate();
@@ -461,14 +462,521 @@ void Header::paint(juce::Graphics& g)
     g.fillRoundedRectangle(sq, radius::radiusMd);
     g.setColour(col(colour::lineStrong));
     g.drawRoundedRectangle(sq, radius::radiusMd, 1.0f);
-    g.setColour(col(on_ ? colour::ink2 : colour::inkMuted).withMultipliedAlpha(on_ ? 1.0f : 0.4f));
     g.setFont(font(type::heading));
+    if (titleLeft_) {   // seamgen plugin_window: the name after the square, in ink
+        g.setColour(col(colour::ink));
+        g.drawText(title_, getLocalBounds().toFloat().withTrimmedLeft(20.0f), juce::Justification::centredLeft);
+        return;
+    }
+    g.setColour(col(on_ ? colour::ink2 : colour::inkMuted).withMultipliedAlpha(on_ ? 1.0f : 0.4f));
     g.drawText(title_, getLocalBounds().toFloat(), juce::Justification::centred);
 }
 
 void Header::mouseDown(const juce::MouseEvent& e)
 {
     if (e.position.x <= 16.0f) att_.setValueAsCompleteGesture(on_ ? 0.0f : 1.0f);
+}
+
+// ---- 126 pt encoder cells ------------------------------------------------------------------------------------------
+namespace {
+constexpr float kCx = 63.0f, kTop = 20.0f, kCy = kTop + 50.0f;   // knob drawing: 104 tall from y 20, centre 50 below
+constexpr float kValY = kTop + 104.0f + 6.0f;                    // value lines: 12 pt, 2 pt apart
+
+float posAngle(int i, int n) { return -135.0f + 270.0f * static_cast<float>(i) / static_cast<float>(std::max(1, n - 1)); }
+
+// A scale label at angle a, radius r (seamgen: centred within 20 deg of the top, else ending / starting there).
+juce::Rectangle<float> labelBox(const juce::String& t, float a, float r, bool bold)
+{
+    const auto p = at(kCx, kCy, a, r);
+    const float w = textWidth(font(10.0f, bold ? 600 : 400), t);
+    const float x = std::fabs(a) < 20.0f ? p.x - w / 2.0f : (a < 0.0f ? p.x - w : p.x);
+    return {x, p.y + 3.5f - 9.5f, w, 12.0f};
+}
+
+void drawLabel(juce::Graphics& g, const juce::String& t, float a, float r, bool sel)
+{
+    g.setColour(col(sel ? colour::ink : colour::inkMuted));
+    g.setFont(font(10.0f, sel ? 600 : 400));
+    const auto p = at(kCx, kCy, a, r);
+    const auto just = std::fabs(a) < 20.0f ? juce::Justification::horizontallyCentred
+                                           : (a < 0.0f ? juce::Justification::right : juce::Justification::left);
+    g.drawSingleLineText(t, juce::roundToInt(p.x), juce::roundToInt(p.y + 3.5f), just);
+}
+
+void dot(juce::Graphics& g, float a, float r, bool sel)
+{
+    const auto p = at(kCx, kCy, a, r);
+    const float d = sel ? 1.4f : 1.1f;
+    g.setColour(col(sel ? colour::ink : colour::inkMuted));
+    g.fillEllipse(p.x - d, p.y - d, 2 * d, 2 * d);
+}
+
+void pointer(juce::Graphics& g, float a, float r, float width)
+{
+    const auto p = at(kCx, kCy, a, r);
+    g.setColour(col(colour::ink));
+    juce::Path l;
+    l.startNewSubPath(kCx, kCy);
+    l.lineTo(p);
+    g.strokePath(l, juce::PathStrokeType(width, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+void drawHead(juce::Graphics& g, const CellHead& h, float w)
+{
+    if (h.glyph.isNotEmpty()) {
+        auto path = eqGlyph(h.glyph);
+        path.applyTransform(juce::AffineTransform::translation((w - 24.0f) / 2.0f, 1.0f));
+        g.setColour(col(colour::ink2));
+        g.strokePath(path, juce::PathStrokeType(1.5f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        return;
+    }
+    g.setColour(col(colour::inkMuted));
+    g.setFont(font(type::micro));
+    g.drawText(h.text, juce::Rectangle<float>(0.0f, 0.0f, w, 14.0f), juce::Justification::centred);
+}
+
+void valueLine(juce::Graphics& g, const juce::String& t, int line, bool dim, float w)
+{
+    g.setColour(col(dim ? colour::inkMuted : colour::ink2));
+    g.setFont(font(10.0f, 400));
+    g.drawText(t, juce::Rectangle<float>(0.0f, kValY + 14.0f * static_cast<float>(line), w, 12.0f), juce::Justification::centred);
+}
+
+void unitText(juce::Graphics& g, const juce::String& u)
+{
+    if (u.isEmpty()) return;
+    g.setColour(col(colour::inkMuted));
+    g.setFont(font(10.0f, 400));
+    g.drawSingleLineText(u, juce::roundToInt(kCx), juce::roundToInt(kTop + 102.0f), juce::Justification::horizontallyCentred);
+}
+
+// Accessible value of a parameter-backed control (normalised range, the parameter's text).
+class ParamValue final : public juce::AccessibilityValueInterface {
+public:
+    ParamValue(ParamControl& c, std::function<bool()> inactive = {}) : c_(c), inactive_(std::move(inactive)) {}
+    bool isReadOnly() const override { return false; }
+    double getCurrentValue() const override { return c_.norm(); }
+    void setValue(double v) override { c_.set(static_cast<float>(v), false); }
+    juce::String getCurrentValueAsString() const override { return inactive_ && inactive_() ? juce::String("inactive") : c_.text(); }
+    void setValueAsString(const juce::String& t) override { c_.set(c_.param.getValueForText(t), false); }
+    AccessibleValueRange getRange() const override
+    {
+        const int s = c_.steps();
+        return {{0.0, 1.0}, s > 0 ? 1.0 / s : 0.01};
+    }
+
+private:
+    ParamControl& c_;
+    std::function<bool()> inactive_;
+};
+
+int stepsFor(const juce::RangedAudioParameter& p)
+{
+    const int n = p.getNumSteps();
+    return (n > 1 && n < 200) ? n - 1 : 0;
+}
+} // namespace
+
+juce::Path eqGlyph(const juce::String& name)
+{
+    static const std::map<juce::String, const char*> paths{
+        {"high", "M1 6 H11 M11 6 L23 1.5 M11 6 L23 10.5"},
+        {"mid", "M1 6 H7 M17 6 H23 M7 6 L10 2.5 H14 L17 6 L14 9.5 H10 Z"},
+        {"low", "M1 1.5 L13 6 M1 10.5 L13 6 M13 6 H23"},
+        {"hpf", "M2 11 C4 3 6 2 9 2 H23"}};
+    const auto it = paths.find(name);
+    return it == paths.end() ? juce::Path{} : juce::Drawable::parseSVGPath(it->second);
+}
+
+// ---- ParamControl ---------------------------------------------------------------------------------------------
+ParamControl::ParamControl(juce::RangedAudioParameter& p, std::function<void()> changed)
+    : param(p), att_(p, [this, cb = std::move(changed)](float v) {
+          norm_ = param.convertTo0to1(v);
+          if (cb) cb();
+      })
+{
+    att_.sendInitialUpdate();
+}
+
+int ParamControl::steps() const { return stepsFor(param); }
+int ParamControl::index() const { return juce::roundToInt(norm_ * static_cast<float>(std::max(1, steps()))); }
+juce::String ParamControl::text() const { return minusSign(param.getText(norm_, 32)); }
+
+void ParamControl::set(float v, bool gesture)
+{
+    v = juce::jlimit(0.0f, 1.0f, v);
+    if (const int s = steps()) v = std::round(v * static_cast<float>(s)) / static_cast<float>(s);
+    const float plain = param.convertFrom0to1(v);
+    if (gesture) att_.setValueAsPartOfGesture(plain);
+    else att_.setValueAsCompleteGesture(plain);
+}
+
+void ParamControl::setIndex(int i)
+{
+    const int s = std::max(1, steps());
+    const float v = static_cast<float>(juce::jlimit(0, s, i)) / static_cast<float>(s);
+    set(v, dragging_);
+    if (dragging_) start_ = v;   // a drag that began on a label continues from it
+}
+
+void ParamControl::begin()
+{
+    start_ = norm_;
+    dragging_ = true;
+    att_.beginGesture();
+}
+
+void ParamControl::drag(float dyUp, bool fine)
+{
+    if (const int s = steps()) {
+        set(start_ + std::trunc(dyUp / 16.0f) / static_cast<float>(s), true);   // one step per 16 pt, no fine mode
+        return;
+    }
+    set(start_ + dyUp * (fine ? 0.1f : 1.0f) / 200.0f, true);
+}
+
+void ParamControl::end()
+{
+    if (dragging_) att_.endGesture();
+    dragging_ = false;
+}
+
+void ParamControl::wheel(float deltaY, bool smooth, bool fine)
+{
+    if (const int s = steps()) {   // one step per notch, or per 16 pt of trackpad scroll
+        if (!smooth) {
+            set(norm_ + (deltaY > 0 ? 1.0f : -1.0f) / static_cast<float>(s), false);
+            return;
+        }
+        wheelAcc_ += deltaY;
+        const float q = 16.0f / 256.0f;
+        while (std::fabs(wheelAcc_) >= q) {
+            const float d = wheelAcc_ > 0 ? 1.0f : -1.0f;
+            set(norm_ + d / static_cast<float>(s), false);
+            wheelAcc_ -= d * q;
+        }
+        return;
+    }
+    set(norm_ + deltaY * (fine ? 0.05f : 0.25f), false);
+}
+
+void ParamControl::step(int dir, bool fine)
+{
+    if (const int s = steps()) {
+        set(norm_ + static_cast<float>(dir) / static_cast<float>(s), false);
+        return;
+    }
+    const float plain = param.convertFrom0to1(norm_) + static_cast<float>(dir) * (fine ? 0.1f : 0.5f);
+    set(param.convertTo0to1(plain), false);
+}
+
+void ParamControl::reset() { set(param.getDefaultValue(), false); }
+
+// ---- ScaleKnob ------------------------------------------------------------------------------------------------
+ScaleKnob::ScaleKnob(juce::RangedAudioParameter& p, CellHead head, Style st, ValueTip& tip)
+    : ctl_(p, [this] { repaint(); if (ctl_.dragging()) showTip(); }), head_(std::move(head)), st_(std::move(st)), tip_(tip)
+{
+    setTitle(st_.name);
+    setWantsKeyboardFocus(true);
+}
+
+void ScaleKnob::showTip() { tip_.show(*this, st_.name + " " + ctl_.text(), -14.0f); }
+
+void ScaleKnob::paint(juce::Graphics& g)
+{
+    drawHead(g, head_, kW);
+    float ang = 0.0f;
+    if (st_.kind == Kind::stepped) {
+        const int n = st_.labels.size(), idx = ctl_.index();
+        for (int i = 0; i < n; ++i) {
+            const float a = posAngle(i, n);
+            dot(g, a, 32.0f, i == idx);
+            if (i % std::max(1, st_.every) == 0) drawLabel(g, st_.labels[i], a, 41.0f, i == idx);
+        }
+        ang = posAngle(idx, n);
+    } else {
+        for (int i = 0; i < 11; ++i) dot(g, -135.0f + 27.0f * static_cast<float>(i), 32.0f, false);
+        const float v = ctl_.norm();
+        if (st_.kind == Kind::bipolar) {
+            for (auto [a, t] : {std::pair{-135.0f, "-"}, std::pair{0.0f, "0"}, std::pair{135.0f, "+"}}) {
+                g.setColour(col(colour::inkMuted));
+                g.setFont(font(10.0f, 400));
+                const auto pt = at(kCx, kCy, a, 41.0f);
+                g.drawSingleLineText(minusSign(t), juce::roundToInt(pt.x), juce::roundToInt(pt.y + 3.5f), juce::Justification::horizontallyCentred);
+            }
+            ang = (2.0f * v - 1.0f) * 135.0f;
+            if (std::fabs(ang) > 0.2f) {
+                g.setColour(col(colour::ink2));
+                g.strokePath(arc(kCx, kCy, 26.0f, std::min(0.0f, ang), std::max(0.0f, ang)), juce::PathStrokeType(2.5f));
+            }
+        } else {
+            drawLabel(g, minusSign(st_.lo), -135.0f, 41.0f, false);
+            drawLabel(g, minusSign(st_.hi), 135.0f, 41.0f, false);
+            ang = -135.0f + 270.0f * v;
+            if (v > 0.002f) {
+                g.setColour(col(colour::ink2));
+                g.strokePath(arc(kCx, kCy, 26.0f, -135.0f, ang), juce::PathStrokeType(2.5f));
+            }
+        }
+    }
+    const float r = 22.0f;
+    g.setColour(col(colour::bg500));
+    g.fillEllipse(kCx - r, kCy - r, 2 * r, 2 * r);
+    g.setColour(col(colour::inkMuted));
+    g.drawEllipse(kCx - r, kCy - r, 2 * r, 2 * r, 1.5f);
+    pointer(g, ang, r - 5.0f, 2.0f);
+    unitText(g, st_.unit);
+    valueLine(g, ctl_.text(), 0, false, kW);
+    if (hasKeyboardFocus(false)) {
+        g.setColour(col(colour::ink2).withAlpha(0.6f));
+        g.drawEllipse(kCx - r - 3, kCy - r - 3, 2 * r + 6, 2 * r + 6, 1.0f);
+    }
+}
+
+int ScaleKnob::labelAt(juce::Point<float> p) const
+{
+    if (st_.kind != Kind::stepped) return -1;
+    const int n = st_.labels.size(), idx = ctl_.index();
+    for (int i = 0; i < n; ++i) {
+        const float a = posAngle(i, n);
+        if (i % std::max(1, st_.every) == 0 && labelBox(st_.labels[i], a, 41.0f, i == idx).expanded(2.0f).contains(p)) return i;
+        if (at(kCx, kCy, a, 32.0f).getDistanceFrom(p) <= 5.0f) return i;
+    }
+    return -1;
+}
+
+void ScaleKnob::mouseDown(const juce::MouseEvent& e)
+{
+    ctl_.begin();
+    if (const int i = labelAt(e.position); i >= 0) ctl_.setIndex(i);   // click a label or dot: jump there
+    showTip();
+}
+void ScaleKnob::mouseDrag(const juce::MouseEvent& e) { ctl_.drag(-static_cast<float>(e.getDistanceFromDragStartY()), e.mods.isAltDown()); }
+void ScaleKnob::mouseUp(const juce::MouseEvent&)
+{
+    ctl_.end();
+    if (!isMouseOver()) tip_.show(*this, {});
+}
+void ScaleKnob::mouseDoubleClick(const juce::MouseEvent& e)
+{
+    if (labelAt(e.position) < 0) ctl_.reset();
+}
+void ScaleKnob::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
+{
+    ctl_.wheel(w.deltaY, w.isSmooth, e.mods.isAltDown());
+    showTip();
+}
+void ScaleKnob::mouseEnter(const juce::MouseEvent&) { showTip(); }
+void ScaleKnob::mouseExit(const juce::MouseEvent&)
+{
+    if (!ctl_.dragging()) tip_.show(*this, {});
+}
+bool ScaleKnob::keyPressed(const juce::KeyPress& k)
+{
+    const int c = k.getKeyCode();
+    const int dir = (c == juce::KeyPress::upKey || c == juce::KeyPress::rightKey) ? 1 : (c == juce::KeyPress::downKey || c == juce::KeyPress::leftKey) ? -1 : 0;
+    if (dir == 0) return false;
+    ctl_.step(dir, k.getModifiers().isAltDown());
+    return true;
+}
+std::unique_ptr<juce::AccessibilityHandler> ScaleKnob::createAccessibilityHandler()
+{
+    return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::slider, juce::AccessibilityActions{},
+                                                        juce::AccessibilityHandler::Interfaces{std::make_unique<ParamValue>(ctl_)});
+}
+
+// ---- DualKnob -------------------------------------------------------------------------------------------------
+// A focusable, accessible part of the dual encoder (keyboard and screen readers); the parent paints and takes the
+// mouse.
+class DualKnob::Focus final : public juce::Component {
+public:
+    Focus(DualKnob& o, Part part, ParamControl& c, juce::String name, std::function<bool()> inactive)
+        : owner_(o), part_(part), ctl_(c), inactive_(std::move(inactive))
+    {
+        setTitle(std::move(name));
+        setWantsKeyboardFocus(true);
+        setInterceptsMouseClicks(false, false);
+    }
+    bool keyPressed(const juce::KeyPress& k) override
+    {
+        const int c = k.getKeyCode();
+        const int dir = (c == juce::KeyPress::upKey || c == juce::KeyPress::rightKey) ? 1 : (c == juce::KeyPress::downKey || c == juce::KeyPress::leftKey) ? -1 : 0;
+        if (dir == 0) return false;
+        owner_.keyPart(part_, dir, k.getModifiers().isAltDown());
+        return true;
+    }
+    void focusGained(FocusChangeType) override { owner_.repaint(); }
+    void focusLost(FocusChangeType) override { owner_.repaint(); }
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override
+    {
+        return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::slider, juce::AccessibilityActions{},
+                                                            juce::AccessibilityHandler::Interfaces{std::make_unique<ParamValue>(ctl_, inactive_)});
+    }
+
+private:
+    DualKnob& owner_;
+    Part part_;
+    ParamControl& ctl_;
+    std::function<bool()> inactive_;
+};
+
+DualKnob::DualKnob(juce::RangedAudioParameter& freq, juce::RangedAudioParameter& gain, CellHead head, juce::StringArray freqLabels,
+                   juce::String unit, juce::String freqName, juce::String gainName, ValueTip& tip)
+    : freq_(freq, [this] { repaint(); if (freq_.dragging()) showTip(); }), gain_(gain, [this] { repaint(); if (gain_.dragging()) showTip(); }),
+      head_(std::move(head)), labels_(std::move(freqLabels)), unit_(std::move(unit)), freqName_(std::move(freqName)),
+      gainName_(std::move(gainName)), tip_(tip)
+{
+    setTitle(head_.a11y);
+    focusRing_ = std::make_unique<Focus>(*this, Part::ring, freq_, freqName_, nullptr);
+    focusKnob_ = std::make_unique<Focus>(*this, Part::knob, gain_, gainName_, [this] { return off(); });
+    addAndMakeVisible(*focusRing_);
+    addAndMakeVisible(*focusKnob_);
+    setFocusContainerType(FocusContainerType::focusContainer);
+}
+
+DualKnob::~DualKnob() = default;
+
+bool DualKnob::off() const { return labels_.size() > 0 && labels_[0] == "Off" && freq_.index() == 0; }
+
+void DualKnob::resized()
+{
+    focusRing_->setBounds(juce::Rectangle<float>(kCx - 28.0f, kCy - 28.0f, 56.0f, 56.0f).toNearestInt());
+    focusKnob_->setBounds(juce::Rectangle<float>(kCx - 16.0f, kCy - 16.0f, 32.0f, 32.0f).toNearestInt());
+}
+
+void DualKnob::paint(juce::Graphics& g)
+{
+    constexpr float ro = 28.0f, rb = 22.0f, ri = 16.0f;
+    drawHead(g, head_, kW);
+    const bool ringOn = active_ == Part::ring || focusRing_->hasKeyboardFocus(false);
+    const bool knobOn = active_ == Part::knob || focusKnob_->hasKeyboardFocus(false);
+    g.setColour(col(colour::bg600));
+    g.drawEllipse(kCx - (ro + rb) / 2, kCy - (ro + rb) / 2, ro + rb, ro + rb, ro - rb);
+    g.setColour(col(ringOn ? colour::ink2 : colour::inkMuted));
+    g.drawEllipse(kCx - ro, kCy - ro, 2 * ro, 2 * ro, ringOn ? 1.5f : 1.0f);
+    const int n = labels_.size(), idx = freq_.index();
+    for (int i = 0; i < n; ++i) {
+        const float a = posAngle(i, n);
+        dot(g, a, ro + 4.0f, i == idx);
+        drawLabel(g, labels_[i], a, ro + 13.0f, i == idx);
+    }
+    {   // the frequency notch across the ring
+        const float fa = posAngle(idx, n);
+        const auto p1 = at(kCx, kCy, fa, rb), p2 = at(kCx, kCy, fa, ro);
+        juce::Path l;
+        l.startNewSubPath(p1);
+        l.lineTo(p2);
+        g.setColour(col(colour::ink));
+        g.strokePath(l, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+    const bool dim = off();
+    if (dim) g.beginTransparencyLayer(0.4f);
+    g.setColour(col(colour::bg500));
+    g.fillEllipse(kCx - ri, kCy - ri, 2 * ri, 2 * ri);
+    g.setColour(col(knobOn ? colour::ink : colour::inkMuted));
+    g.drawEllipse(kCx - ri, kCy - ri, 2 * ri, 2 * ri, 1.5f);
+    const float ga = (2.0f * gain_.norm() - 1.0f) * 135.0f, rg = (ri + rb) / 2.0f;
+    if (std::fabs(ga) > 0.2f) {
+        g.setColour(col(colour::ink2));
+        g.strokePath(arc(kCx, kCy, rg, std::min(0.0f, ga), std::max(0.0f, ga)), juce::PathStrokeType(2.5f));
+    }
+    pointer(g, ga, ri - 4.0f, 2.0f);
+    if (dim) g.endTransparencyLayer();
+    unitText(g, unit_);
+    valueLine(g, freq_.text(), 0, active_ == Part::knob, kW);
+    valueLine(g, gain_.text(), 1, active_ == Part::ring || dim, kW);
+}
+
+DualKnob::Part DualKnob::partAt(juce::Point<float> p) const
+{
+    const float d = p.getDistanceFrom({kCx, kCy});
+    if (d < 19.0f) return Part::knob;                               // the inner knob and half the gap
+    if (d <= 50.0f || labelAt(p) >= 0) return Part::ring;            // the ring with its printed scale
+    return Part::none;
+}
+
+int DualKnob::labelAt(juce::Point<float> p) const
+{
+    const int n = labels_.size(), idx = freq_.index();
+    for (int i = 0; i < n; ++i) {
+        const float a = posAngle(i, n);
+        if (labelBox(labels_[i], a, 41.0f, i == idx).expanded(2.0f).contains(p)) return i;
+        if (at(kCx, kCy, a, 32.0f).getDistanceFrom(p) <= 4.0f) return i;
+    }
+    return -1;
+}
+
+void DualKnob::setActive(Part p)
+{
+    if (p == active_) return;
+    active_ = p;
+    repaint();
+}
+
+void DualKnob::showTip()
+{
+    if (active_ == Part::none) {
+        tip_.show(*this, {});
+        return;
+    }
+    tip_.show(*this, active_ == Part::ring ? freqName_ + " " + freq_.text() : gainName_ + " " + gain_.text(), -14.0f);
+}
+
+void DualKnob::keyPart(Part part, int dir, bool fine) { (part == Part::ring ? freq_ : gain_).step(dir, fine); }
+
+void DualKnob::mouseMove(const juce::MouseEvent& e)
+{
+    if (dragPart_ != Part::none) return;
+    setActive(partAt(e.position));
+    showTip();
+}
+void DualKnob::mouseEnter(const juce::MouseEvent& e) { mouseMove(e); }
+void DualKnob::mouseExit(const juce::MouseEvent&)
+{
+    if (dragPart_ != Part::none) return;
+    setActive(Part::none);
+    tip_.show(*this, {});
+}
+void DualKnob::mouseDown(const juce::MouseEvent& e)
+{
+    dragPart_ = partAt(e.position);
+    setActive(dragPart_);
+    if (dragPart_ == Part::none) return;
+    auto& c = dragPart_ == Part::ring ? freq_ : gain_;
+    c.begin();
+    if (dragPart_ == Part::ring)
+        if (const int i = labelAt(e.position); i >= 0) c.setIndex(i);
+    showTip();
+}
+void DualKnob::mouseDrag(const juce::MouseEvent& e)
+{
+    if (dragPart_ == Part::none) return;
+    (dragPart_ == Part::ring ? freq_ : gain_).drag(-static_cast<float>(e.getDistanceFromDragStartY()), e.mods.isAltDown());
+}
+void DualKnob::mouseUp(const juce::MouseEvent& e)
+{
+    if (dragPart_ != Part::none) (dragPart_ == Part::ring ? freq_ : gain_).end();
+    dragPart_ = Part::none;
+    if (!isMouseOver()) {
+        setActive(Part::none);
+        tip_.show(*this, {});
+    } else {
+        setActive(partAt(e.position));
+    }
+}
+void DualKnob::mouseDoubleClick(const juce::MouseEvent& e)
+{
+    const Part p = partAt(e.position);
+    if (p == Part::knob) gain_.reset();
+    else if (p == Part::ring && labelAt(e.position) < 0) freq_.reset();
+}
+void DualKnob::mouseWheelMove(const juce::MouseEvent& e, const juce::MouseWheelDetails& w)
+{
+    const Part p = partAt(e.position);
+    if (p == Part::none) return;
+    setActive(p);
+    (p == Part::ring ? freq_ : gain_).wheel(w.deltaY, w.isSmooth, e.mods.isAltDown());
+    showTip();
 }
 
 } // namespace lkit::seamui

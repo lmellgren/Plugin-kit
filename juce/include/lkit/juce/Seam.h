@@ -23,7 +23,9 @@ juce::String minusSign(juce::String s);   // typographic minus
 // Value tooltip above a control (Knob.md): bg-500, line-strong border, micro.
 class ValueTip final : public juce::Component {
 public:
-    void show(juce::Component& anchor, const juce::String& text);
+    // Centred above the anchor, its top at y (anchor coordinates; 22 for the 44 pt Encoder, -14 for the 126 pt
+    // encoder cells, as seamgen knob_tip). An empty text hides it.
+    void show(juce::Component& anchor, const juce::String& text, float y = 22.0f);
     void paint(juce::Graphics&) override;
 
 private:
@@ -138,6 +140,9 @@ public:
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override { clip_ = false; repaint(); }
     void setDark(bool d) { dark_ = d; }
+    void poll() { timerCallback(); }                         // one meter tick now (tests)
+    float levelDb(int ch) const { return level_[ch & 1]; }   // the bar's level (tests: QA G4)
+    float holdDb(int ch) const { return hold_[ch & 1]; }
 
 private:
     void timerCallback() override;
@@ -147,10 +152,11 @@ private:
     bool clip_ = false, dark_ = false;
 };
 
-// Header (ChainSlot): the on/off square, then the name in heading style.
+// Header: the on/off square, then the name in heading style. Centred over its bounds (Passive EQ), or left after
+// the square with an 8 pt gap in ink (seamgen plugin_window, titleLeft).
 class Header final : public juce::Component {
 public:
-    Header(juce::RangedAudioParameter& on, juce::String title);
+    Header(juce::RangedAudioParameter& on, juce::String title, bool titleLeft = false);
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
     bool isOn() const { return on_; }
@@ -159,7 +165,121 @@ public:
 private:
     juce::ParameterAttachment att_;
     juce::String title_;
-    bool on_ = true;
+    bool on_ = true, titleLeft_ = false;
+};
+
+// ---- 126 pt encoder cells (Knob.md; seamgen enc + single_knob / dual_knob) --------------------------------------
+// EQ section glyphs as on the hardware front panel (seamgen ICON, 24 x 12): "high", "mid", "low", "hpf".
+juce::Path eqGlyph(const juce::String& name);
+
+// One parameter's value logic, shared by the knobs: stepped (choice / few steps) or continuous; drag (stepped: one
+// step per 16 pt; continuous: full range per 200 pt, Option x 0.1), wheel, arrow keys (stepped: one step;
+// continuous: 0.5, Option 0.1, in plain units), default on double-click. Message thread.
+class ParamControl {
+public:
+    ParamControl(juce::RangedAudioParameter& p, std::function<void()> changed);
+    int steps() const;   // > 0: stepped, number of intervals
+    int index() const;   // the step (stepped)
+    float norm() const { return norm_; }
+    void set(float norm, bool gesture);
+    void setIndex(int i);
+    void begin();
+    void drag(float dyUp, bool fine);
+    void end();
+    bool dragging() const { return dragging_; }
+    void wheel(float deltaY, bool smooth, bool fine);
+    void step(int dir, bool fine);
+    void reset();
+    juce::String text() const;   // the parameter's text, typographic minus
+    juce::RangedAudioParameter& param;
+
+private:
+    juce::ParameterAttachment att_;
+    float norm_ = 0.0f, start_ = 0.0f, wheelAcc_ = 0.0f;
+    bool dragging_ = false;
+};
+
+// Head of an encoder cell: an EQ glyph (glyph name) or a text label (micro, ink-muted).
+struct CellHead {
+    juce::String glyph, text, a11y;
+};
+
+// The 126 x 156 encoder cell: head (14), gap 6, the 104 pt knob drawing (centre 50 below its top), gap 6, the
+// value line(s). Stepped: a dot per position and labels (every n-th on dense scales; dots and labels are click
+// targets); bipolar: 11 dots, − 0 +, arc from 12 o'clock; unipolar: 11 dots, end labels, arc from the minimum.
+class ScaleKnob final : public juce::Component {
+public:
+    enum class Kind { stepped, bipolar, unipolar };
+    struct Style {
+        Kind kind = Kind::bipolar;
+        juce::StringArray labels;   // stepped: one per position
+        int every = 1;              // stepped: a label on every n-th position
+        juce::String lo, hi;        // unipolar end labels
+        juce::String unit;          // under the knob
+        juce::String name;          // tooltip and accessibility ("Input")
+    };
+    ScaleKnob(juce::RangedAudioParameter& p, CellHead head, Style st, ValueTip& tip);
+    static constexpr float kW = 126.0f, kH = 156.0f;
+    void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+    bool keyPressed(const juce::KeyPress&) override;
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    int labelAt(juce::Point<float> p) const;   // stepped: the position whose label or dot is at p, else -1
+    ParamControl& control() { return ctl_; }
+
+private:
+    void showTip();
+    ParamControl ctl_;
+    CellHead head_;
+    Style st_;
+    ValueTip& tip_;
+};
+
+// Dual encoder (Knob.md): outer ring = stepped frequency (scale printed around), inner knob = bipolar gain. Two hit
+// zones and two focusable parts (frequency first); the part under the pointer, or being dragged, is outlined. Both
+// values under it, the inactive one in ink-muted. An "Off" first position dims the inner knob to 40 %.
+class DualKnob final : public juce::Component {
+public:
+    DualKnob(juce::RangedAudioParameter& freq, juce::RangedAudioParameter& gain, CellHead head, juce::StringArray freqLabels,
+             juce::String unit, juce::String freqName, juce::String gainName, ValueTip& tip);
+    ~DualKnob() override;
+    static constexpr float kW = 126.0f, kH = 156.0f;
+    enum class Part { none, ring, knob };
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    void mouseMove(const juce::MouseEvent&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
+    void mouseDoubleClick(const juce::MouseEvent&) override;
+    void mouseWheelMove(const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
+    void mouseEnter(const juce::MouseEvent&) override;
+    void mouseExit(const juce::MouseEvent&) override;
+    Part partAt(juce::Point<float> p) const;
+    int labelAt(juce::Point<float> p) const;   // the frequency position whose label or dot is at p, else -1
+    ParamControl& freq() { return freq_; }
+    ParamControl& gain() { return gain_; }
+    Part active() const { return active_; }
+    void keyPart(Part part, int dir, bool fine);   // arrow keys on a focused part
+
+private:
+    class Focus;
+    void setActive(Part p);
+    void showTip();
+    bool off() const;
+    ParamControl freq_, gain_;
+    CellHead head_;
+    juce::StringArray labels_;
+    juce::String unit_, freqName_, gainName_;
+    ValueTip& tip_;
+    Part active_ = Part::none, dragPart_ = Part::none;
+    std::unique_ptr<Focus> focusRing_, focusKnob_;
 };
 
 } // namespace lkit::seamui
