@@ -21,13 +21,14 @@ editor layout) stays in the plugin repo. Improve the kit instead of forking it, 
 | Offline render | `RenderJob.h` | Driver for a plugin's core render tool: reads the text job from `lkit.jobs`, same protocol as the AU host. |
 | Wrapper base | `juce/…/ProcessorBase.h` | `juce::AudioProcessor` shell: true bypass on the On parameter, static Auto Gain (an expensive part on the message thread, a cheap part per block on the audio thread so it follows automation, also with Auto Gain off), Output trim, meters, mono/stereo, chunking, versioned state + migration. |
 | Seam UI | `juce/…/Seam.h`, `juce/gen_tokens.py`, `cmake/Lkit.cmake` | Encoder (44 pt: unipolar/bipolar/stepped), the 126 pt encoder cells of the chain modules (ScaleKnob: stepped with dense scales, bipolar, unipolar; DualKnob: frequency ring + gain knob, two hit zones and focus parts; EQ glyphs; label/dot click, keyboard, accessibility), Segmented, Toggle, Trim, Section, Meter, Header (centred or plugin-window style), ValueTip. `lkit_seam_tokens(<target>)` generates `Tokens.h` from `~/Apps/Seam/design/tokens.json` at build time; no design file is copied. |
-| AU host | `measure/lkit_measure.mm` | `list`, `params` (parameter map, presets, channel configs, latency), `probe`, `render` (settle, reset, pre-roll, read-back checks; `watch`: output parameters such as meters read once per block; a mid-render `change` renders in real time with the main run loop running and re-sends until it reads back, for plugins that apply parameters on a main-thread timer). Effects `aufx` and music effects `aumf`. |
+| AU host | `measure/lkit_measure.mm` | `list`, `params` (parameter map, presets, channel configs, latency), `probe`, `render` (settle, reset, pre-roll, read-back checks; `stimulus_channels: 2` for an interleaved stereo stimulus; `watch`: output parameters such as meters read once per block; a mid-render `change` renders in real time with the main run loop running and re-sends until it reads back, for plugins that apply parameters on a main-thread timer). Effects `aufx` and music effects `aumf`. |
 | VST3/AU render | `tools/vst3render/` | Headless render of our own VST3/AU builds from the same host job (VST3 == AU checks). An AU is found through the system registry: install the build first. |
 | Measurement | `python/lkit/sweep.py`, `jobs.py`, `host.py` | Synchronised exponential sweep (H1 + harmonics), jobs (settings x levels -> `.npz` + MANIFEST), parameter maps. |
 | Circuit | `python/lkit/mna.py`, `spice.py` | Netlist (R, C, L, K, E): AC response, state space with physical states (for `Foh.h`), sympy H(s), ngspice deck + runner. |
 | Fit | `python/lkit/fit.py` | Staged, bounded least squares in physical parameters; refuses holdout settings. |
 | Reports | `python/lkit/plots.py` | Plot style and family-of-curves helpers. |
 | Analysis | `python/lkit/analysis.py` | Peak frequency, shelf midpoint, −3 dB corner, coherent harmonics, THD+N, harmonic tracks (Blackman-Harris), worst alias of a sine render (from Pre 73). |
+| Dynamics | `python/lkit/dynamics.py` | Compressor/limiter measurement: sine stimuli whose level changes only at whole cycles (staircase for the static curve in one render, piecewise bursts), steady-state stats per segment (level, gain, H2…Hk, THD+N), instantaneous gain trace (analytic envelopes), attack time, release fit (single and two-slope, for program-dependent release), GR read-back from the output (Vari-mu P2). |
 | Model values | `python/lkit/params_header.py` | `write_params_header(values, out, namespace, source)`: the circuit model's component values (nominal + fitted) → a generated C++ header of `constexpr` values; component values only, never response tables (from Pre 73). |
 | Snapshot | `juce/include/lkit/juce/Snapshot.h`, `templates/snapshot/` | Plugin window → PNG without a host (`setPlain`, `feedTone`, `writeEditorSnapshot`), for the face check against the Seam preview; the template is the console app to copy (from Pre 73). Needs `JUCE_MODAL_LOOPS_PERMITTED=1`. |
 | Seam reference | `tools/seam_reference.py` | Screenshot of a seamgen plugin window (read-only import of the design tools). |
@@ -53,7 +54,7 @@ target_link_libraries(MyPlugin PRIVATE lkit::juce lkit::seam ...)
 lkit_seam_tokens(MyPlugin)
 ```
 
-Python: `sys.path.insert(0, "kit/python")`, then `from lkit import host, jobs, mna, spice, fit, analysis, params_header`.
+Python: `sys.path.insert(0, "kit/python")`, then `from lkit import host, jobs, mna, spice, fit, analysis, dynamics, params_header`.
 
 ## Not in the kit (yet)
 

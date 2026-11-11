@@ -11,7 +11,7 @@
 //   lkit_measure probe  --plugin SPEC --param ID --values v1,v2,... [--json FILE]
 //   lkit_measure render --plugin SPEC --job JOB.json --out DIR
 //     job keys: sample_rate, block_size, settle_s, preroll_s, tail_s, stimulus, base_params, runs[{name, params,
-//     gain, change, meta}], watch [ids: output parameters (meters) read once per recorded block -> NAME.json "watch"]
+//     gain, change, meta}], stimulus_channels [1: mono to every input (default), 2: interleaved L/R], watch [ids: output parameters (meters) read once per recorded block -> NAME.json "watch"]
 //
 // Effects of type aufx (effect) and aumf (music effect) are both searched.
 //
@@ -307,7 +307,8 @@ static NSDictionary* hostInfo(const Host& h)
 
 struct Stimulus {
     const float* data = nullptr;
-    size_t length = 0;
+    size_t length = 0;    // frames
+    size_t channels = 1;  // interleaved channels in data: 1 = the same signal to every input, 2 = one per channel
     double gain = 1.0;
     size_t offset = 0; // position where the stimulus starts (in rendered samples)
     size_t pos = 0;    // current rendered sample
@@ -319,10 +320,12 @@ static OSStatus inputCallback(void* ctx, AudioUnitRenderActionFlags*, const Audi
     auto* s = static_cast<Stimulus*>(ctx);
     for (UInt32 i = 0; i < n; ++i) {
         size_t k = s->pos + i;
-        float x = 0.0f;
-        if (s->data && k >= s->offset && k - s->offset < s->length)
-            x = static_cast<float>(s->data[k - s->offset] * s->gain);
-        for (UInt32 b = 0; b < io->mNumberBuffers; ++b) static_cast<float*>(io->mBuffers[b].mData)[i] = x;
+        const bool in = s->data && k >= s->offset && k - s->offset < s->length;
+        for (UInt32 b = 0; b < io->mNumberBuffers; ++b) {
+            float x = 0.0f;
+            if (in) x = static_cast<float>(s->data[(k - s->offset) * s->channels + (b % s->channels)] * s->gain);
+            static_cast<float*>(io->mBuffers[b].mData)[i] = x;
+        }
     }
     return noErr;
 }
@@ -517,7 +520,8 @@ static int cmdRender(int argc, char** argv)
     AudioUnit u = s.h.unit;
     Renderer& r = s.r;
     r.stim.data = static_cast<const float*>(stimData.bytes);
-    r.stim.length = stimData.length / sizeof(float);
+    r.stim.channels = job[@"stimulus_channels"] ? std::max(1u, [job[@"stimulus_channels"] unsignedIntValue]) : 1;
+    r.stim.length = stimData.length / sizeof(float) / r.stim.channels;
 
     NSDictionary* base = job[@"base_params"] ?: @{};
     NSArray* runs = job[@"runs"];
