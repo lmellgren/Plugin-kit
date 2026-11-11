@@ -82,17 +82,23 @@ def _smooth(v: np.ndarray, n: int) -> np.ndarray:
     return np.convolve(np.pad(v, (n // 2, n - 1 - n // 2), mode="edge"), k, mode="valid")
 
 
-def gain_trace(y, x, fs: float, f0: float, smooth_s: float | None = None, offset: int = 0, floor_db: float = -120.0):
+def gain_trace(y, x, fs: float, f0: float, smooth_s: float | None = None, offset: int = 0, floor_db: float = -120.0,
+               hp_hz: float | None = None):
     """Instantaneous gain in dB from the analytic envelopes of output and input (Hilbert), smoothed over smooth_s
-    (default: one period of f0, which removes the ripple from harmonics). Returns (t, gain_db); samples where the input
-    is below floor_db are NaN."""
-    from scipy.signal import hilbert
+    (default: one period of f0, which removes the ripple from harmonics). hp_hz: zero-phase 4th-order high-pass on both
+    signals first, so a low-frequency transient in the output (a compressor's thump) does not bend the envelope; keep it
+    well below f0. Returns (t, gain_db); samples where the input is below floor_db are NaN."""
+    from scipy.signal import butter, hilbert, sosfiltfilt
     y = np.asarray(y, float)
     y = y[:, 0] if y.ndim == 2 else y
     y = y[offset:offset + len(x)]
     if y.size < len(x):
         y = np.pad(y, (0, len(x) - y.size))
-    ex = np.abs(hilbert(np.asarray(x, float)))
+    x = np.asarray(x, float)
+    if hp_hz:
+        sos = butter(4, hp_hz, btype="high", fs=fs, output="sos")
+        x, y = sosfiltfilt(sos, x), sosfiltfilt(sos, y)
+    ex = np.abs(hilbert(x))
     ey = np.abs(hilbert(y))
     n = int(round(fs / f0)) if smooth_s is None else max(1, int(round(smooth_s * fs)))
     ex, ey = _smooth(ex, n), _smooth(ey, n)

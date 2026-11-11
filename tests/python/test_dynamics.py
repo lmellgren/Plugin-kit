@@ -70,3 +70,16 @@ def test_two_slope_release():
     r = D.release_fit(tt, g, t_off, tt[-1], ref_db=0.0, lo=0.02)
     assert r["rms_err2_db"] < r["rms_err_db"]
     assert abs(r["tau1_s"] / 0.2 - 1) < 0.15 and abs(r["tau2_s"] / 2.0 - 1) < 0.15
+
+
+def test_gain_trace_ignores_lf_transient_with_hp():
+    x, segs = D.piecewise([(-30, 0.2), (-10, 0.3), (-30, 1.0)], F0, FS)
+    y = _compressor(x, segs, 0.002, 0.3, 10.0)
+    t = np.arange(x.size) / FS
+    t_on = segs[1][0] / FS
+    thump = np.where(t >= t_on, 0.2 * np.exp(-(t - t_on) / 0.02) * np.sin(2 * np.pi * 20 * (t - t_on)), 0.0)
+    _, g_bad = D.gain_trace(y + thump, x, FS, F0, smooth_s=0.0005)
+    _, g_hp = D.gain_trace(y + thump, x, FS, F0, smooth_s=0.0005, hp_hz=300)
+    _, g_ref = D.gain_trace(y, x, FS, F0, smooth_s=0.0005)
+    m = (t > t_on + 0.005) & (t < t_on + 0.06)
+    assert np.max(np.abs(g_hp[m] - g_ref[m])) < 0.2 and np.max(np.abs(g_bad[m] - g_ref[m])) > 1.0
