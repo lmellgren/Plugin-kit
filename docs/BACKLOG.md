@@ -17,8 +17,9 @@ Names are Seam module names, never trademarks. The references are internal only.
 | # | LOMAS plugin | Reference (internal) | Uses in project | Role | Status | Next |
 |---|---|---|---|---|---|---|
 | 1 | **Passive EQ** | Waves PuigTec EQP1A (m/s) | 3 | Default chain | ✅ 0.1.0 built, listening test passed. **Parked** (M8 + analyzer; LATER: window 340 → 400) | Move onto Plugin-kit later |
-| 2 | **Pre 73** | Arturia Pre 1973 | 2 | Default chain | 🔨 P7 built, P7b/P7c accepted | P7d (Low band, window 400) → P8 |
-| 3 | **Vari-mu** | Waves PuigChild 670 (s) / 660 (m) | 14 | Default chain | Face exists in Seam design system (VariMu component); no repo | P0 when Pre 73 is at P8. Builds the dynamics module in Plugin-kit |
+| 2 | **Pre 73** | Arturia Pre 1973 | 2 | Default chain | 🔨 P7 complete (P7–P7d accepted) | P8: host session + listening test |
+| 3 | **Vari-mu** | Waves PuigChild 670 (s) / 660 (m) | 14 | Default chain | 🔨 **Decided (Lars, 11 Nov 2026).** P0 written (`~/Apps/Plugins/VariMu`, `lmellgren/VariMu`); **kit owner** this round | Lars answers P0 §3 → `go` P1. Builds the dynamics module in Plugin-kit |
+| T | **Tape** *(working name)* | Concept: Walters Audio T805 (hardware, manual only); anchors: Waves Kramer Tape, Softube Tape | 3 (off) | Colour, inserted | 🔨 **Unparked (Lars, 11 Nov 2026)**, T805 scope, in parallel with Vari-mu. P0 written (`~/Apps/Plugins/Tape`, `lmellgren/Tape`); kit read-only | Lars answers P0 §3 → `go` P1 |
 
 ## Proposed next (after the default chain)
 
@@ -49,7 +50,6 @@ Effects outside the recording chain, each as its own small plugin. RC-20's modul
 
 | Plugin | Reference | Note |
 |---|---|---|
-| Tape *(working name)* | Concept: Walters Audio T805 (hardware); data: Waves Kramer Tape, Softube Tape | **Candidate to unpark** (11 Nov): T805-style scope without transport (Gain with compensation, Bias, HF, Nominal/Overbias) → 3/5, ≈ 1×. Fits after Saturator |
 | Harmonics | Softube Harmonics | Off. Research: drop, covered by Saturator + Iron |
 | Transient shaper | elysia nvelope | Both instances off; AU not found. Small filler once the dynamics kit exists |
 
@@ -66,4 +66,4 @@ Effects outside the recording chain, each as its own small plugin. RC-20's modul
 4. Re-run the plugin analysis on 1–2 more Ableton projects before committing beyond #4? One project is a small sample (several plugins have 1–2 uses).
 5. Where do EFX plugins go relative to the channel-strip plugins in the queue: interleaved (for example Ring mod as a quick win) or as a block after?
 6. Where do EFX live in Seam: insert or send/return?
-7. Unpark Tape (T805 scope)?
+7. ~~Unpark Tape (T805 scope)?~~ **Yes** (Lars, 11 Nov 2026): runs in parallel with Vari-mu.
