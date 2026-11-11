@@ -53,11 +53,14 @@ public:
         const int h = nUp_ - 1;
         d2* x = workUp_.data();
         for (int i = 0; i < n; ++i) x[h + i] = in[i];
-        switch (nHalf_) {   // short stages with compile-time tap counts
+        switch (nHalf_) {   // common stages with compile-time tap counts (8: 110 dB colour stage; 20 / 32: 100 dB at 48 / 44.1 kHz)
         case 4: upKernel<4>(x + h, n, out); break;
         case 5: upKernel<5>(x + h, n, out); break;
         case 6: upKernel<6>(x + h, n, out); break;
+        case 8: upKernel<8>(x + h, n, out); break;
         case 16: upKernel<16>(x + h, n, out); break;
+        case 20: upKernel<20>(x + h, n, out); break;
+        case 32: upKernel<32>(x + h, n, out); break;
         default: upKernel<0>(x + h, n, out); break;
         }
         for (int i = 0; i < h; ++i) x[i] = x[n + i];
@@ -71,7 +74,10 @@ public:
         case 4: downKernel<4>(x + h, n, out); break;
         case 5: downKernel<5>(x + h, n, out); break;
         case 6: downKernel<6>(x + h, n, out); break;
+        case 8: downKernel<8>(x + h, n, out); break;
         case 16: downKernel<16>(x + h, n, out); break;
+        case 20: downKernel<20>(x + h, n, out); break;
+        case 32: downKernel<32>(x + h, n, out); break;
         default: downKernel<0>(x + h, n, out); break;
         }
         for (int i = 0; i < h; ++i) x[i] = x[2 * n + i];
