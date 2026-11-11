@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LOMAS plugin backlog</title>
+<style>
+:root{--bg-000:#141414;--bg-100:#1b1b1b;--bg-200:#1e1e1e;--bg-300:#232323;--bg-400:#2a2a2a;--bg-500:#2e2e2e;--bg-600:#3a3a3a;--line:#3a3a3a;--line-strong:#555;--ink:#ededed;--ink-2:#d4d4d4;--ink-muted:#9a9a9a;--accent:#ff9f2e;--accent-ink:#1a1a1a;--activator:#f2c94c;--ok:#4cc38a;--record:#e5534b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg-200);color:var(--ink);font:12px/16px Inter,system-ui,-apple-system,sans-serif}
+header{padding:32px 32px 8px;max-width:1500px}
+h1{font-size:32px;line-height:40px;font-weight:600;margin:0 0 6px}
+h2{font-size:16px;line-height:22px;font-weight:600;margin:24px 0 8px}
+.sub{color:var(--ink-muted);max-width:900px}
+.summary{display:flex;gap:12px;flex-wrap:wrap;margin:16px 0 0}
+.card{background:var(--bg-400);border:1px solid var(--line);border-radius:6px;padding:12px;min-width:220px;flex:1;max-width:360px}
+.card b{display:block;font-size:13px;line-height:18px;margin-bottom:4px}
+.card span{color:var(--ink-2)}
+.legend{color:var(--ink-muted);margin-top:12px}
+main{padding:8px 32px 48px}
+table{border-collapse:collapse;width:100%;min-width:1400px}
+th{position:sticky;top:0;z-index:2;background:var(--bg-300);text-align:left;font-size:11px;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.04em;padding:10px 12px;border-bottom:1px solid var(--line-strong)}
+td{vertical-align:top;padding:16px 12px;border-bottom:1px solid var(--line)}
+tr.group td{background:var(--bg-100);padding:8px 12px;font-size:13px;font-weight:600;color:var(--ink-2);border-bottom:1px solid var(--line-strong)}
+.name{width:180px}
+.name .n{font-size:16px;line-height:22px;font-weight:600}
+.name .ref{color:var(--ink-muted);margin-top:4px}
+.name .use{display:inline-block;margin-top:8px;padding:2px 6px;border-radius:2px;background:var(--bg-500);color:var(--ink-2);font-size:10px;font-weight:600}
+.status{display:inline-block;margin-top:6px;padding:2px 6px;border-radius:2px;font-size:10px;font-weight:600}
+.st-done{background:var(--ok);color:var(--accent-ink)}.st-wip{background:var(--accent);color:var(--accent-ink)}.st-new{background:var(--bg-600);color:var(--ink)}.st-park{background:transparent;border:1px solid var(--line-strong);color:var(--ink-muted)}
+.mock{width:1%;white-space:nowrap}
+.mockwrap{background:var(--bg-300);border:1px solid var(--line);border-radius:3px;padding:10px;overflow:hidden}
+.scaler{transform-origin:0 0}
+.mockcap{color:var(--ink-muted);font-size:10px;margin-top:6px;white-space:normal;max-width:520px}
+.cx{width:280px}
+.score{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.dots{display:flex;gap:3px}.dots i{width:10px;height:10px;border-radius:50%;background:var(--bg-600);display:block}.dots i.on{background:var(--accent)}
+.score b{font-size:13px}
+.bars{display:grid;grid-template-columns:96px 1fr;gap:4px 8px;align-items:center;margin:8px 0}
+.bars span{color:var(--ink-muted);font-size:11px}
+.bar{height:4px;background:var(--bg-000);border-radius:2px;position:relative}.bar i{position:absolute;left:0;top:0;bottom:0;background:var(--ink-2);border-radius:2px}
+.effort{margin-top:8px;color:var(--ink-2)}.effort b{color:var(--ink)}
+.cx p,.ap p{margin:6px 0;color:var(--ink-2)}
+.ap{min-width:340px}
+.ap ul{margin:4px 0 8px;padding-left:16px;color:var(--ink-2)}.ap li{margin:3px 0}
+.ap .k{font-size:10px;font-weight:600;color:var(--ink-muted);text-transform:uppercase;letter-spacing:.04em;margin-top:10px}
+.rec{margin-top:10px;padding:8px;border-left:2px solid var(--accent);background:var(--bg-400);color:var(--ink)}
+a{color:var(--accent)}
+footer{padding:0 32px 32px;color:var(--ink-muted);max-width:1000px}
+</style>
+</head>
+<body>
+<header>
+  <h1>LOMAS plugin backlog</h1>
+  <div class="sub">One row per plugin from <code>lomas/BACKLOG.md</code> (source: the Ableton project <code>261105 Pose måker.als</code>). For each: a quick mockup in the Seam design system, a complexity assessment, and a proposed approach using the LOMAS recipe (P0–P8, Plugin-kit, measure the installed reference as a black box). Mockups are first sketches built from Seam tokens and components (ChainSlot, Knob, segmented control, LevelMeter, GR meter). They are not frozen faces; each face is frozen in Seam’s <code>design/</code> before its P7. Names are Seam’s own; the references are internal only. 11 Nov 2026.</div>
+  <div class="summary">
+    <div class="card"><b>Cheapest win: Iron</b><span>A transformer-only module that reuses Pre 73’s transformer and bias model. Could be built right after Pre 73 at about half the effort of Passive EQ.</span></div>
+    <div class="card"><b>Most used: Vari-mu</b><span>14 uses, and its face already exists. It also builds the dynamics framework (detector, GR meter, step-response measurement) that FET and Multiband need.</span></div>
+    <div class="card"><b>Reconsider: Multiband</b><span>A clean digital tool with no analogue character to capture. It has a heavy GUI and gets 1 use. It is better hosted as 3rd party.</span></div>
+    <div class="card"><b>Proposed order</b><span>Pre 73 → Vari-mu → Iron → FET → Saturator → Bass harmonics. Multiband and Harmonics are parked. Tape (T805-style, no transport) is a candidate to unpark. Transient is an optional small filler.</span></div>
+    <div class="card"><b>EFX: small plugins</b><span>Spring, Ring mod, and the RC-20 modules (Wobble, Distort, Space, Loss) as separate plugins. Ring mod, Wobble and Loss are cheap. Spring is the strongest candidate. Before the first one, Seam needs a decision on where EFX live (insert or send).</span></div>
+  </div>
+  <div class="legend">Complexity: ●○○○○ trivial … ●●●●● very hard. Effort is relative to LOMAS Passive EQ (= 1×, M0–M7b) and assumes Plugin-kit as it stands after Pre 73.</div>
+</header>
+<main>
+<table>
+<thead><tr><th>Plugin</th><th>Mockup (Seam design system)</th><th>Complexity</th><th>Proposed approach</th></tr></thead>
+<tbody id="rows"></tbody>
+</table>
+</main>
+<footer>Source of truth: <code>lmellgren/Plugin-kit</code> → <code>docs/backlog/</code> (data in <code>backlog-data.js</code>, mockups in <code>index.html</code>). Edit the repo, then republish this page. Sources: <code>seam/PLUGINS.md</code>, <code>lomas/BACKLOG.md</code>, <code>lomas/PLUGIN-PLAYBOOK.md</code>, the design system «Seam» (tokens, ChainSlot, VariMu, Knob). The reference controls are described from the plugins' public feature sets. Check them against the installed versions on Larss-MacBook-Pro in each plugin’s P0.</footer>
+
+<script src="backlog-data.js"></script>
+<script>
+const C={b0:'#141414',b3:'#232323',b4:'#2a2a2a',b5:'#2e2e2e',b6:'#3a3a3a',line:'#3a3a3a',ls:'#555555',ink:'#ededed',ink2:'#d4d4d4',mut:'#9a9a9a',acc:'#ff9f2e',accInk:'#1a1a1a',act:'#f2c94c',ok:'#4cc38a'};
+const rad=d=>d*Math.PI/180;
+const pt=(cx,cy,R,a)=>[(cx+R*Math.sin(rad(a))).toFixed(1),(cy-R*Math.cos(rad(a))).toFixed(1)];
+function arc(cx,cy,R,a0,a1){if(Math.abs(a1-a0)<0.5)return '';const[x0,y0]=pt(cx,cy,R,Math.min(a0,a1)),[x1,y1]=pt(cx,cy,R,Math.max(a0,a1));return `<path d="M${x0} ${y0} A${R} ${R} 0 ${Math.abs(a1-a0)>180?1:0} 1 ${x1} ${y1}" fill="none" stroke="${C.ink2}" stroke-width="2.5"/>`}
+/* Knob – geometry from the Seam Knob component (126×90, body r22, arc r26, dots r32, −135°…+135°) */
+function knob(label,val,f,o={}){
+  const w=o.w||126,cx=63,cy=50,a=-135+270*f;let s='';
+  if(o.steps){o.steps.forEach((t,i)=>{const aa=-135+270*i/(o.steps.length-1),[x,y]=pt(cx,cy,32,aa),[tx,ty]=pt(cx,cy,42,aa),on=Math.abs(aa-a)<1;s+=`<circle cx="${x}" cy="${y}" r="${on?1.4:1.1}" fill="${on?C.ink:C.mut}"/><text x="${tx}" y="${(+ty+3.5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="${on?600:400}" fill="${on?C.ink:C.mut}">${t}</text>`})}
+  else{for(let i=0;i<11;i++){const[x,y]=pt(cx,cy,32,-135+27*i);s+=`<circle cx="${x}" cy="${y}" r="1.1" fill="${C.mut}"/>`}
+    s+=`<text x="34" y="82.5" text-anchor="end" font-size="10" fill="${C.mut}">${o.lo??'0'}</text><text x="92" y="82.5" font-size="10" fill="${C.mut}">${o.hi??'10'}</text>`;
+    s+=o.bip?arc(cx,cy,26,0,a):arc(cx,cy,26,-135,a)}
+  const[px,py]=pt(cx,cy,17,a);
+  s+=`<circle cx="${cx}" cy="${cy}" r="22" fill="${C.b5}" stroke="${C.mut}" stroke-width="1.5"/><line x1="${cx}" y1="${cy}" x2="${px}" y2="${py}" stroke="${C.ink}" stroke-width="2" stroke-linecap="round"/>`;
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:11px;line-height:14px;color:${C.ink2}">${label}</span><svg width="${w}" height="${(w*90/126).toFixed(0)}" viewBox="0 0 126 90" style="display:block">${s}</svg><span style="font-size:10px;line-height:12px;color:${C.ink};font-variant-numeric:tabular-nums">${val}</span></div>`}
+const vdiv=`<div style="width:1px;align-self:stretch;background:${C.line};margin:4px 0"></div>`;
+const row=(h,g=6,extra='')=>`<div style="display:flex;align-items:center;gap:${g}px;${extra}">${h}</div>`;
+const col=(h,g=8)=>`<div style="display:flex;flex-direction:column;gap:${g}px">${h}</div>`;
+function seg(opts,sel,aria){return `<span role="group" aria-label="${aria||''}" style="display:inline-flex;gap:1px;border-radius:3px;overflow:hidden">${opts.map((t,i)=>`<button type="button" style="min-width:26px;height:22px;padding:0 6px;border:0;font:600 11px Inter,system-ui,sans-serif;background:${i===sel?C.acc:C.b6};color:${i===sel?C.accInk:C.ink2}">${t}</button>`).join('')}</span>`}
+function toggle(t,on){return `<button type="button" style="height:22px;padding:0 8px;border:0;border-radius:3px;font:600 11px Inter,system-ui,sans-serif;background:${on?C.act:C.b6};color:${on?C.accInk:C.ink2}">${t}</button>`}
+function lbl(t){return `<span style="font-size:11px;color:${C.ink2}">${t}</span>`}
+function trim(t,v){return row(`${lbl(t)}<svg width="22" height="22" viewBox="0 0 22 22"><circle cx="11" cy="11" r="8" fill="none" stroke="${C.mut}" stroke-width="1.5"/><line x1="11" y1="11" x2="11" y2="7" stroke="${C.ink}" stroke-width="1.5" stroke-linecap="round"/></svg><span style="width:46px;height:22px;border-radius:2px;background:${C.b0};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:${C.ink2};font-variant-numeric:tabular-nums">${v}</span>`)}
+function section(title,inner){return `<div style="border:1px solid ${C.line};border-radius:3px;background:${C.b3};display:flex;flex-direction:column"><div style="height:20px;padding:0 8px;display:flex;align-items:center;border-bottom:1px solid ${C.line};font-size:10px;font-weight:600;color:${C.mut}">${title}</div><div style="padding:4px 10px">${inner}</div></div>`}
+/* GR meter – same drawing as VariMu’s */
+function gr(db,label='GR'){const a=db<=10?38-3.8*db:-3.8*(db-10);const[x,y]=pt(88,130,72,a);
+  let t='';[[42.4,71.7,38.1,66.2,'20',33.2,62.9],[88,56,88,49,'10',88,44],[133.6,71.7,137.9,66.2,'0',142.8,62.9]].forEach(k=>{t+=`<line x1="${k[0]}" y1="${k[1]}" x2="${k[2]}" y2="${k[3]}" stroke="${C.ink2}" stroke-width="1.2"/><text x="${k[5]}" y="${k[6]}" text-anchor="middle" font-size="10" fill="${C.ink2}">${k[4]}</text>`});
+  return `<svg width="176" height="100" viewBox="0 0 176 100" style="display:block;background:${C.b0};border-radius:3px"><text x="6" y="95" font-size="10" font-weight="600" fill="${C.mut}">${label}</text><path d="M42.4 71.7 A74 74 0 0 1 133.6 71.7" fill="none" stroke="${C.mut}" stroke-width="1"/>${t}<line x1="88" y1="130" x2="${x}" y2="${y}" stroke="${C.acc}" stroke-width="1.8" stroke-linecap="round"/><text x="170" y="95" text-anchor="end" font-size="10" font-weight="600" fill="${C.ink}">−${db.toFixed(1)} dB</text></svg>`}
+/* Harmonics display: H1…H7 bars */
+function harm(vals,label,w=176){const bw=(w-24)/vals.length;let s='';vals.forEach((v,i)=>{const h=v*70,x=12+i*bw;s+=`<rect x="${(x+3).toFixed(1)}" y="${(82-h).toFixed(1)}" width="${(bw-6).toFixed(1)}" height="${h.toFixed(1)}" fill="${i===0?C.mut:C.acc}" rx="1"/><text x="${(x+bw/2).toFixed(1)}" y="95" text-anchor="middle" font-size="10" fill="${C.mut}">H${i+1}</text>`});
+  return `<svg width="${w}" height="100" viewBox="0 0 ${w} 100" style="display:block;background:${C.b0};border-radius:3px"><text x="6" y="12" font-size="10" font-weight="600" fill="${C.mut}">${label}</text>${s}</svg>`}
+/* Bass harmonics spectrum */
+function bassSpec(){const w=260;let s=`<text x="6" y="12" font-size="10" font-weight="600" fill="${C.mut}">SPECTRUM</text>`;
+  s+=`<rect x="14" y="20" width="58" height="62" fill="${C.b6}" opacity=".5"/><line x1="72" y1="18" x2="72" y2="84" stroke="${C.acc}" stroke-width="1.5" stroke-dasharray="3 2"/><text x="72" y="95" text-anchor="middle" font-size="10" fill="${C.ink}">80 Hz</text>`;
+  [[30,.85,C.mut],[48,.7,C.mut],[96,.55,C.acc],[128,.45,C.acc],[160,.32,C.acc],[192,.22,C.acc],[224,.14,C.acc]].forEach(([x,v,c])=>{s+=`<rect x="${x}" y="${(82-v*62).toFixed(1)}" width="6" height="${(v*62).toFixed(1)}" fill="${c}" rx="1"/>`});
+  s+=`<text x="40" y="95" text-anchor="middle" font-size="10" fill="${C.mut}">Original</text><text x="200" y="95" text-anchor="middle" font-size="10" fill="${C.mut}">Harmonics</text>`;
+  return `<svg width="${w}" height="100" viewBox="0 0 ${w} 100" style="display:block;background:${C.b0};border-radius:3px">${s}</svg>`}
+/* Multiband crossover + GR */
+function xover(){const w=520,xs=[14,140,270,400,506];let s=`<text x="6" y="12" font-size="10" font-weight="600" fill="${C.mut}">BANDS · GR</text>`;const g=[.25,.55,.15,.35];
+  for(let i=0;i<4;i++){const x0=xs[i],x1=xs[i+1],sel=i===1;s+=`<rect x="${x0}" y="20" width="${x1-x0-2}" height="58" fill="${sel?'rgba(255,159,46,.14)':C.b3}"/><rect x="${x0}" y="20" width="${x1-x0-2}" height="${(g[i]*58).toFixed(1)}" fill="${sel?C.acc:C.mut}" opacity="${sel?0.9:0.55}"/><text x="${((x0+x1)/2).toFixed(0)}" y="94" text-anchor="middle" font-size="10" font-weight="600" fill="${sel?C.ink:C.mut}">${i+1}</text>`;
+    if(i>0)s+=`<line x1="${x0-1}" y1="16" x2="${x0-1}" y2="82" stroke="${C.ink2}" stroke-width="1"/><circle cx="${x0-1}" cy="16" r="3" fill="${C.ink2}"/>`}
+  ['120 Hz','1.2 kHz','6 kHz'].forEach((t,i)=>s+=`<text x="${xs[i+1]+4}" y="30" font-size="10" fill="${C.ink2}">${t}</text>`);
+  return `<svg width="${w}" height="100" viewBox="0 0 ${w} 100" style="display:block;background:${C.b0};border-radius:3px">${s}</svg>`}
+/* Transient envelope */
+function env(){const w=220;return `<svg width="${w}" height="100" viewBox="0 0 ${w} 100" style="display:block;background:${C.b0};border-radius:3px"><text x="6" y="12" font-size="10" font-weight="600" fill="${C.mut}">ENVELOPE</text><path d="M10 82 L30 30 Q60 52 120 66 T210 80" fill="none" stroke="${C.mut}" stroke-width="1.2" stroke-dasharray="3 2"/><path d="M10 82 L30 18 Q55 58 120 70 T210 81" fill="none" stroke="${C.acc}" stroke-width="1.8"/><text x="34" y="94" font-size="10" fill="${C.ink2}">Attack +4 dB</text><text x="132" y="94" font-size="10" fill="${C.ink2}">Sustain −2 dB</text></svg>`}
+function meter(){const h=314;return `<div style="display:flex;align-items:flex-start"><div style="position:relative;width:7px;display:flex;flex-direction:column;gap:1px"><span style="width:7px;height:3px;border-radius:1px;background:${C.b0};display:block"></span><div style="display:flex;gap:1px">${[90,88].map(t=>`<span style="width:3px;height:${h}px;background:${C.b0};position:relative;display:block;overflow:hidden"><span style="position:absolute;left:0;right:0;bottom:0;top:${t}px;background:${C.ok}"></span><span style="position:absolute;left:0;right:0;top:${t-10}px;height:1px;background:${C.act}"></span></span>`).join('')}</div><span style="position:absolute;left:-2px;right:-2px;top:32.5px;height:1px;background:${C.ink}"></span></div></div>`}
+/* ChainSlot frame: 360 tall, header line with on/off square, module, LevelMeter right */
+function slot(name,body,foot){return `<div style="height:360px;padding:8px 6px;background:${C.b4};border:1px solid ${C.ls};border-radius:3px;display:inline-flex;flex-direction:column;align-items:center;gap:6px"><div style="position:relative;width:100%;height:14px;display:flex;justify-content:center;align-items:center"><span style="position:absolute;left:0;top:1px;width:12px;height:12px;border-radius:3px;border:1px solid ${C.ls};background:${C.mut}"></span><span style="font-size:11px;font-weight:600;line-height:14px;color:${C.ink2}">${name}</span></div><div style="display:flex;gap:8px;align-items:stretch;height:326px"><div style="display:flex;flex-direction:column;justify-content:space-between;gap:8px">${body}${foot?row(foot,6):''}</div>${meter()}</div></div>`}
+
+const MOCK={
+fet:()=>slot('FET',col(section('Compressor',row(gr(7)+vdiv+knob('Input','28',0.62,{lo:'∞',hi:'0'})+knob('Output','22',0.5,{lo:'∞',hi:'0'}),6))+section('Timing · Ratio',row(knob('Attack','5',0.55,{w:96,lo:'1',hi:'7'})+knob('Release','3',0.35,{w:96,lo:'1',hi:'7'})+vdiv+col(lbl('Ratio')+seg(['4','8','12','20','All'],1,'Ratio'),6),8))),
+  seg(['GR','In','Out'],0,'Meter')+`<span style="display:flex;gap:6px;margin-left:auto">${trim('Mix','100 %')}${trim('SC HPF','Off')}</span>`),
+sat:()=>slot('Saturator',col(section('Drive',row(knob('Drive','4.5',0.45)+vdiv+col(lbl('Style')+seg(['Tape','Desk','Class A','Tube','Pentode'],2,'Style')+row(toggle('Punish',false)+toggle('Auto',true),4),6),8))+section('Tone · Filters',row(knob('Tone','0',0.5,{w:96,bip:true,lo:'Dark',hi:'Bright'})+knob('Low cut','Off',0,{w:96,lo:'Off',hi:'560'})+knob('High cut','Off',1,{w:96,lo:'1k',hi:'Off'}),4))),
+  trim('Mix','100 %')+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+iron:()=>slot('Iron',col(section('Transformer',row(harm([1,.42,.18,.12,.06,.04],'HARMONICS')+vdiv+knob('Drive','+6 dB',0.6,{lo:'0',hi:'+18'}),6))+section('Shape',row(col(lbl('Type')+seg(['Type 1','Type 2','Type 3'],0,'Type'),6)+vdiv+knob('Low','+1.5',0.62,{w:96,bip:true,lo:'−',hi:'+'})+knob('High','−0.5',0.45,{w:96,bip:true,lo:'−',hi:'+'}),8))),
+  trim('Mix','100 %')+`<span style="margin-left:auto">${trim('Output','−6.0 dB')}</span>`),
+bass:()=>slot('Bass harmonics',col(section('Harmonics',row(bassSpec()+vdiv+knob('Frequency','80 Hz',0.42,{lo:'40',hi:'160'}),6))+section('Mix',row(knob('Harmonics','−6 dB',0.6,{w:96,lo:'−∞',hi:'0'})+knob('Original','0 dB',0.85,{w:96,lo:'−∞',hi:'0'})+vdiv+knob('Dynamics','30 %',0.3,{w:96,lo:'0',hi:'100'}),6))),
+  toggle('Listen harmonics',false)+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+mb:()=>slot('Multiband',col(section('Bands',xover())+section('Band 2 · 120 Hz – 1.2 kHz',row(knob('Threshold','−18',0.4,{w:96,lo:'−60',hi:'0'})+knob('Range','−6',0.3,{w:96,lo:'−24',hi:'+12'})+vdiv+knob('Attack','10 ms',0.4,{w:96,lo:'.1',hi:'500'})+knob('Release','120 ms',0.45,{w:96,lo:'5',hi:'5k'})+vdiv+knob('Gain','0.0',0.5,{w:96,bip:true,lo:'−',hi:'+'}),4))),
+  seg(['1','2','3','4'],1,'Band')+toggle('Solo band',false)+`<span style="margin-left:auto;display:flex;gap:6px">${toggle('Sidechain',false)}${trim('Output','0.0 dB')}</span>`),
+tape:()=>slot('Tape',col(section('Record',row(gr(4,'VU')+vdiv+knob('Gain','+6 dB',0.65,{bip:true,lo:'−20',hi:'+20'}),6))+section('Tape',row(knob('Bias','0 dB',0.5,{w:96,bip:true,lo:'Under',hi:'Over'})+knob('HF','4 dB',0.5,{w:96,lo:'0',hi:'8'})+vdiv+col(lbl('Calibration')+seg(['Nominal','Overbias'],0,'Calibration'),6),8))),
+  toggle('Auto',true)+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+harmx:()=>slot('Harmonics',col(section('Character',row(harm([1,.35,.1,.08,.02],'HARMONICS',150)+vdiv+knob('Drive','3.0',0.3),6))+section('Shape',row(knob('Even / Odd','+20',0.6,{w:96,bip:true,lo:'Odd',hi:'Even'})+knob('Tone','0',0.5,{w:96,bip:true,lo:'Dark',hi:'Bright'})+knob('Dynamics','40 %',0.4,{w:96,lo:'0',hi:'100'}),4))),
+  trim('Mix','100 %')+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+trans:()=>slot('Transient',col(section('Envelope',row(env()+vdiv+knob('Attack','+4 dB',0.68,{bip:true,lo:'−',hi:'+'}),6))+section('Body',row(knob('Sustain','−2 dB',0.42,{w:96,bip:true,lo:'−',hi:'+'})+knob('Speed','Fast',0.25,{w:96,lo:'Fast',hi:'Slow'})+vdiv+col(lbl('Mode')+seg(['Clean','Smooth'],0,'Mode'),6),8))),
+  trim('Mix','100 %')+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`)
+};
+
+/* small dark display panel */
+function disp(label,inner,w=220){return `<svg width="${w}" height="100" viewBox="0 0 ${w} 100" style="display:block;background:${C.b0};border-radius:3px"><text x="6" y="12" font-size="10" font-weight="600" fill="${C.mut}">${label}</text>${inner}</svg>`}
+function springDisp(){let p='M14 56';for(let i=0;i<=36;i++){const x=14+i*5.2,y=56+Math.sin(i*1.9)*(10-i*0.18);p+=` L${x.toFixed(1)} ${y.toFixed(1)}`}
+  let ir='';for(let i=0;i<60;i++){const x=14+i*3.2,h=Math.exp(-i/22)*30*Math.abs(Math.sin(i*0.9));ir+=`<line x1="${x.toFixed(1)}" y1="90" x2="${x.toFixed(1)}" y2="${(90-h).toFixed(1)}" stroke="${C.acc}" stroke-width="1.4"/>`}
+  return disp('TANK 3 · 2.4 s',`<path d="${p}" fill="none" stroke="${C.mut}" stroke-width="1.2"/>${ir}`)}
+function oscDisp(){let a='',b='';for(let i=0;i<=200;i++){const x=10+i,t=i/200;const s=Math.sin(t*Math.PI*2*3)*Math.sin(t*Math.PI*2*0.6);a+=(i?' L':'M')+x+' '+(56-24*s).toFixed(1);b+=(i?' L':'M')+x+' '+(56-24*Math.sin(t*Math.PI*2*0.6)).toFixed(1)}
+  return disp('CARRIER × INPUT',`<path d="${b}" fill="none" stroke="${C.mut}" stroke-width="1" stroke-dasharray="3 2"/><path d="${a}" fill="none" stroke="${C.acc}" stroke-width="1.6"/>`)}
+function wobDisp(){let p='';for(let i=0;i<=200;i++){const t=i/200,y=50+16*Math.sin(t*Math.PI*2*1.2)+4*Math.sin(t*Math.PI*2*11+1)+2*Math.sin(t*Math.PI*2*17);p+=(i?' L':'M')+(10+i)+' '+y.toFixed(1)}
+  return disp('PITCH',`<line x1="10" y1="50" x2="210" y2="50" stroke="${C.b6}" stroke-width="1"/><path d="${p}" fill="none" stroke="${C.acc}" stroke-width="1.6"/><text x="214" y="30" text-anchor="end" font-size="10" fill="${C.mut}">+12 c</text><text x="214" y="90" text-anchor="end" font-size="10" fill="${C.mut}">−12 c</text>`)}
+function focusDisp(label,lo,hi){return disp(label,`<path d="M10 80 C${lo-20} 80 ${lo} 30 ${lo+20} 30 L${hi-20} 30 C${hi} 30 ${hi+20} 80 210 80" fill="rgba(255,159,46,.14)" stroke="${C.acc}" stroke-width="1.6"/><line x1="${lo}" y1="20" x2="${lo}" y2="88" stroke="${C.ink2}"/><line x1="${hi}" y1="20" x2="${hi}" y2="88" stroke="${C.ink2}"/><circle cx="${lo}" cy="20" r="3" fill="${C.ink2}"/><circle cx="${hi}" cy="20" r="3" fill="${C.ink2}"/><text x="${lo}" y="97" text-anchor="middle" font-size="10" fill="${C.mut}">200 Hz</text><text x="${hi}" y="97" text-anchor="middle" font-size="10" fill="${C.mut}">6 kHz</text>`)}
+function decayDisp(){let r='';for(let i=0;i<80;i++){const x=14+i*2.4,h=Math.exp(-i/30)*55*(0.6+0.4*Math.abs(Math.sin(i*2.7)));r+=`<line x1="${x.toFixed(1)}" y1="86" x2="${x.toFixed(1)}" y2="${(86-h).toFixed(1)}" stroke="${C.acc}" stroke-width="1.2" opacity=".85"/>`}
+  return disp('ROOM · 1.8 s',`<line x1="14" y1="86" x2="14" y2="22" stroke="${C.ink}" stroke-width="2"/>${r}`)}
+function lossDisp(){let s='';const gaps=[[40,58],[96,104],[140,170]];let x=10;gaps.forEach(([a,b])=>{s+=`<rect x="${x}" y="34" width="${a-x}" height="36" fill="${C.mut}" opacity=".5"/><rect x="${a}" y="34" width="${b-a}" height="36" fill="none" stroke="${C.acc}" stroke-dasharray="3 2"/>`;x=b});s+=`<rect x="${x}" y="34" width="${210-x}" height="36" fill="${C.mut}" opacity=".5"/>`;
+  return disp('DROPOUTS',s+`<text x="155" y="88" text-anchor="middle" font-size="10" fill="${C.ink2}">repeat</text>`)}
+Object.assign(MOCK,{
+spring:()=>slot('Spring',col(section('Preamp · Tank',row(springDisp()+vdiv+knob('Drive','3.5',0.35)+col(lbl('Preamp')+seg(['Type 1','Type 2'],0,'Preamp')+lbl('Tank')+seg(['1','2','3','4','5','6','7','8'],2,'Tank'),6),8))+section('Reverb',row(knob('Decay','2.4 s',0.5,{w:84,lo:'S',hi:'L'})+knob('Pre-delay','20 ms',0.2,{w:84,lo:'0',hi:'250'})+knob('Width','80 %',0.8,{w:84,lo:'Mono',hi:'Wide'})+vdiv+knob('Low cut','150',0.3,{w:84,lo:'Off',hi:'1k'})+knob('Tone','0',0.5,{w:84,bip:true,lo:'Dark',hi:'Bright'}),2))),
+  trim('Mix','35 %')+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+ring:()=>slot('Ring mod',col(section('Carrier',row(oscDisp()+vdiv+knob('Frequency','440 Hz',0.55,{lo:'1',hi:'5k'}),6))+section('Shape · Movement',row(col(lbl('Wave')+seg(['Sine','Tri','Square'],0,'Wave')+lbl('Mode')+seg(['Ring','AM','Diode'],2,'Mode'),6)+vdiv+knob('LFO rate','0.5 Hz',0.3,{w:90,lo:'0.05',hi:'20'})+knob('LFO depth','15 %',0.15,{w:90,lo:'0',hi:'100'}),6))),
+  toggle('Follow input',false)+`<span style="margin-left:auto;display:flex;gap:6px">${trim('Mix','60 %')}${trim('Output','0.0 dB')}</span>`),
+wobble:()=>slot('Wobble',col(section('Wow · Flutter',row(wobDisp()+vdiv+knob('Amount','40 %',0.4),6))+section('Shape',row(knob('Wow','30 %',0.3,{w:90,lo:'0',hi:'100'})+knob('Wow rate','0.8 Hz',0.35,{w:90,lo:'0.1',hi:'4'})+vdiv+knob('Flutter','15 %',0.15,{w:90,lo:'0',hi:'100'})+knob('Flutter rate','9 Hz',0.45,{w:90,lo:'4',hi:'20'}),4))),
+  toggle('Stereo',true)+`<span style="margin-left:auto;display:flex;gap:6px">${trim('Mix','100 %')}${trim('Output','0.0 dB')}</span>`),
+distort:()=>slot('Distort',col(section('Drive',row(focusDisp('FOCUS',70,170)+vdiv+knob('Drive','4.0',0.4),6))+section('Character',row(col(lbl('Type')+seg(['Tube','Iron','Speaker','Tape','Fold','Hard'],0,'Type'),6)+vdiv+knob('Tone','0',0.5,{w:90,bip:true,lo:'Dark',hi:'Bright'}),8))),
+  trim('Mix','100 %')+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+space:()=>slot('Space',col(section('Reverb',row(decayDisp()+vdiv+knob('Decay','1.8 s',0.45,{lo:'0.1',hi:'10'}),6))+section('Shape',row(col(lbl('Type')+seg(['Room','Hall','Plate','Spring','Box'],0,'Type'),6)+vdiv+knob('Pre-delay','15 ms',0.15,{w:84,lo:'0',hi:'250'})+knob('Size','50 %',0.5,{w:84,lo:'S',hi:'L'}),6))),
+  trim('Mix','25 %')+`<span style="margin-left:auto">${trim('Output','0.0 dB')}</span>`),
+loss:()=>slot('Loss',col(section('Dropouts',row(lossDisp()+vdiv+knob('Amount','30 %',0.3),6))+section('Shape',row(knob('Rate','2 /s',0.4,{w:84,lo:'0.1',hi:'20'})+knob('Length','60 ms',0.35,{w:84,lo:'5',hi:'500'})+knob('Depth','−∞',1,{w:84,lo:'0',hi:'−∞'})+vdiv+col(lbl('Mode')+seg(['Gap','Repeat','Codec'],1,'Mode'),6),6))),
+  toggle('Sync',false)+`<span style="margin-left:auto;display:flex;gap:6px">${trim('Mix','100 %')}${trim('Output','0.0 dB')}</span>`)
+});
+const DS='https://claude.ai/artifact/Hgd85dyct3RzfZcpSgr4rk';
+const R=window.BACKLOG;
+const labels=['DSP model','Measure / fit','GUI','CPU risk'];
+const tb=document.getElementById('rows');
+R.forEach(r=>{
+  if(r.g){tb.insertAdjacentHTML('beforeend',`<tr class="group"><td colspan="4">${r.g}</td></tr>`);return}
+  const dots=[1,2,3,4,5].map(i=>`<i class="${i<=r.score?'on':''}"></i>`).join('');
+  const bars=r.sub.map((v,i)=>`<span>${labels[i]}</span><div class="bar"><i style="width:${v*20}%"></i></div>`).join('');
+  const mock=r.mock?`<div class="mockwrap"><div class="scaler" data-m="${r.mock}">${MOCK[r.mock]()}</div></div><div class="mockcap">${r.cap}</div>`
+    :`<div class="mockwrap" style="white-space:normal;max-width:420px;color:var(--ink-2)">${r.existing}<br><a href="${DS}">Open the design system «Seam»</a></div>`;
+  tb.insertAdjacentHTML('beforeend',`<tr>
+   <td class="name"><div class="n">${r.n}</div><div class="ref">${r.ref}</div><div class="use">${r.use}</div><br><span class="status st-${r.st[0]}">${r.st[1]}</span></td>
+   <td class="mock">${mock}</td>
+   <td class="cx"><div class="score"><div class="dots">${dots}</div><b>${r.score}/5</b></div><div class="bars">${bars}</div><div class="effort">Effort: <b>${r.effort}</b></div>${r.cx}</td>
+   <td class="ap">${r.ap}</td></tr>`)});
+/* scale mockups to fit the column */
+const S=0.62;
+document.querySelectorAll('.scaler').forEach(el=>{const w=el.scrollWidth,h=el.scrollHeight;el.style.transform=`scale(${S})`;el.style.width=w+'px';el.parentElement.style.width=(w*S+22)+'px';el.parentElement.style.height=(h*S+22)+'px'});
+</script>
+</body>
+</html>
