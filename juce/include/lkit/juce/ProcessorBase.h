@@ -5,7 +5,8 @@
 //   * On/off = true bypass: off passes the input to the output bit for bit, delayed by the reported
 //     latency; switching crossfades over 10 ms (lkit::TrueBypass). While fully off the core is not run
 //     and is reset once, so it restarts clean.
-//   * Static, deterministic Auto Gain: computeAutoGainDb() runs on the message thread whenever a
+//   * Static, deterministic Auto Gain: blockGainDb() (cheap, e.g. a drive step) runs on the audio thread every
+//     block; computeAutoGainDb() (expensive, e.g. an EQ curve's loudness) runs on the message thread whenever a
 //     parameter changes; the audio thread smooths to it (50 ms). No level follower.
 //   * Output trim in dB after Auto Gain (20 ms smoothing).
 //   * Output peak meters, mono/stereo layouts (matched in/out), chunking to the prepared block size.
