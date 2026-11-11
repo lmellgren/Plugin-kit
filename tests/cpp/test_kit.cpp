@@ -5,6 +5,7 @@
 #include "lkit/Golden.h"
 #include "lkit/Halfband.h"
 #include "lkit/LinAlg.h"
+#include "lkit/Modal.h"
 #include "lkit/Smooth.h"
 #include "lkit/TrueBypass.h"
 
@@ -148,6 +149,178 @@ static void testFoh()
     }
 }
 
+static void testEigen()
+{
+    // companion matrix of (s + 1)(s + 2)(s^2 + 2 s + 5): roots -1, -2, -1 +- 2j
+    double A[4][4] = {{-5, -13, -19, -10}, {1, 0, 0, 0}, {0, 1, 0, 0}, {0, 0, 1, 0}}, re[4], im[4];
+    CHECK(lkit::linalg::eigenvalues<4>(A, re, im));
+    int found = 0;
+    for (int i = 0; i < 4; ++i) {
+        const cd l(re[i], im[i]);
+        for (const cd r : {cd(-1, 0), cd(-2, 0), cd(-1, 2), cd(-1, -2)})
+            if (std::abs(l - r) < 1e-9) ++found;
+    }
+    CHECK(found == 4);
+    // random 6 x 6: det(A - l I) ~ 0 for every eigenvalue, trace preserved
+    std::mt19937 rng(7);
+    std::uniform_real_distribution<double> u(-1.0, 1.0);
+    for (int t = 0; t < 50; ++t) {
+        double B[6][6], r6[6], i6[6], tr = 0.0, sr = 0.0;
+        for (int i = 0; i < 6; ++i)
+            for (int j = 0; j < 6; ++j) B[i][j] = u(rng) * std::pow(10.0, 3.0 * u(rng));
+        for (int i = 0; i < 6; ++i) tr += B[i][i];
+        CHECK(lkit::linalg::eigenvalues<6>(B, r6, i6));
+        for (int i = 0; i < 6; ++i) sr += r6[i];
+        CHECK(std::fabs(tr - sr) < 1e-8 * (1.0 + std::fabs(tr)) * 1e3);
+        double nb = 0.0;
+        for (auto& r : B)
+            for (double v : r) nb = std::max(nb, std::fabs(v));
+        for (int i = 0; i < 6; ++i) {   // inverse iteration: (B - l I) x ~ 0 for a unit x
+            const cd l(r6[i], i6[i]), sh = l + cd(1e-9, 1e-9) * nb;
+            cd M[6][6], R[6][1];
+            for (int a = 0; a < 6; ++a) {
+                for (int b = 0; b < 6; ++b) M[a][b] = B[a][b] - (a == b ? sh : cd(0.0));
+                R[a][0] = 1.0 + 0.1 * a;
+            }
+            CHECK((lkit::linalg::luSolve<6, 1, cd>(M, R)));
+            double xn = 0.0, res = 0.0;
+            for (auto& r : R) xn += std::norm(r[0]);
+            xn = std::sqrt(xn);
+            for (int a = 0; a < 6; ++a) {
+                cd acc = 0.0;
+                for (int b = 0; b < 6; ++b) acc += (B[a][b] - (a == b ? l : cd(0.0))) * R[b][0] / xn;
+                res = std::max(res, std::abs(acc));
+            }
+            CHECK(res < 1e-7 * nb);
+        }
+    }
+    // null space of a rank-4 6 x 6 matrix
+    double P[6][4], Q[4][6], M[6][6], Bn[6][2];
+    for (auto& r : P)
+        for (double& v : r) v = u(rng);
+    for (auto& r : Q)
+        for (double& v : r) v = u(rng);
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j) {
+            M[i][j] = 0.0;
+            for (int k = 0; k < 4; ++k) M[i][j] += P[i][k] * Q[k][j];
+        }
+    double M0[6][6];
+    std::memcpy(M0, M, sizeof M);
+    CHECK((lkit::linalg::nullspace<6, 2>(M, Bn)));
+    double worst = 0.0;
+    for (int k = 0; k < 2; ++k)
+        for (int i = 0; i < 6; ++i) {
+            double acc = 0.0;
+            for (int j = 0; j < 6; ++j) acc += M0[i][j] * Bn[j][k];
+            worst = std::max(worst, std::fabs(acc));
+        }
+    CHECK(worst < 1e-12);
+}
+
+// Six states with a complex pair, a near-repeated real pair and two separate real poles (rad/s), mixed by a
+// random well-conditioned basis.
+static lkit::StateSpace<6> sixStates()
+{
+    const double blocks[3][2][2] = {{{-3000, -20000}, {20000, -3000}}, {{-5650, 1}, {0, -5640}}, {{-60, 0}, {0, -4.4e5}}};
+    double J[6][6] = {}, P[6][6], Pi[6][6];
+    for (int b = 0; b < 3; ++b)
+        for (int i = 0; i < 2; ++i)
+            for (int k = 0; k < 2; ++k) J[2 * b + i][2 * b + k] = blocks[b][i][k];
+    std::mt19937 rng(3);
+    std::uniform_real_distribution<double> u(-0.5, 0.5);
+    for (int i = 0; i < 6; ++i)
+        for (int j = 0; j < 6; ++j) P[i][j] = (i == j ? 1.0 : 0.0) + u(rng), Pi[i][j] = i == j ? 1.0 : 0.0;
+    double Pc[6][6];
+    std::memcpy(Pc, P, sizeof P);
+    lkit::linalg::luSolve<6, 6>(Pc, Pi);
+    lkit::StateSpace<6> ss;
+    double PJ[6][6];
+    lkit::linalg::matmul<6>(P, J, PJ);
+    lkit::linalg::matmul<6>(PJ, Pi, ss.A);
+    for (int i = 0; i < 6; ++i) ss.B[i] = 1000.0 * (1.0 + u(rng)), ss.C[i] = 1.0 + u(rng);
+    ss.D = 0.3;
+    return ss;
+}
+
+static void testModal()
+{
+    auto check = [](auto ss, auto designer, auto coeffs, const char* name) {
+        for (double fs : {88200.0, 96000.0}) {
+            designer.prepare(fs, 20000.0);
+            for (int delay : {1, 2}) {
+                CHECK(designer.design(ss, delay, coeffs));
+                double maxDb = 0.0, maxDeg = 0.0, an = 0.0;
+                for (int i = 0; i <= 200; ++i) {
+                    const double f = 20.0 * std::pow(1000.0, i / 200.0);
+                    const cd ref = ss.response(f) * std::exp(cd(0, -2 * kPi * f * delay / fs));
+                    const cd got = coeffs.response(std::exp(cd(0, -2 * kPi * f / fs)));
+                    maxDb = std::max(maxDb, std::fabs(20 * std::log10(std::abs(got / ref))));
+                    maxDeg = std::max(maxDeg, std::fabs(std::arg(got / ref)) * 180 / kPi);
+                    an = std::max(an, std::abs(coeffs.analog(f) / ss.response(f) - 1.0));
+                }
+                std::printf("Modal %s fs %.0f delay %d: max %.4f dB, %.3f deg; modal analog %.1e\n", name, fs, delay, maxDb, maxDeg, an);
+                CHECK(an < 1e-9);
+                CHECK(maxDb < (delay == 2 ? 0.02 : 0.1) && maxDeg < (delay == 2 ? 0.2 : 1.0));
+            }
+        }
+    };
+    check(sixStates(), lkit::ModalDesigner<6, 2>{}, lkit::ModalCoeffs<6, 2>{}, "6 states, 2x2 blocks");
+    check(rlc(), lkit::ModalDesigner<3, 3>{}, lkit::ModalCoeffs<3, 3>{}, "RLC, one block");
+
+    // realtime filter = designed response; a coefficient change keeps the physical states
+    const auto ss = sixStates();
+    const double fs = 96000.0;
+    lkit::ModalDesigner<6, 2> d;
+    d.prepare(fs, 20000.0);
+    lkit::ModalCoeffs<6, 2> c1, c2;
+    CHECK(d.design(ss, 2, c1));
+    auto ss2 = ss;
+    for (auto& r : ss2.A)
+        for (double& v : r) v *= 1.3;   // another setting
+    CHECK(d.design(ss2, 2, c2));
+    lkit::ModalFilter<6, 2> flt;
+    flt.setCoefficients(c1);
+    flt.reset();
+    const double f0 = 1000.0;
+    cd acc = 0.0;
+    const int n = static_cast<int>(fs);
+    for (int i = 0; i < n; ++i) {
+        const double x = std::sin(2 * kPi * f0 * i / fs);
+        const double y = flt.tick(lkit::d2{x, -x})[0];
+        if (i >= n / 2) acc += y * std::exp(cd(0, -2 * kPi * f0 * i / fs));
+    }
+    const cd hm = acc / (n / 4.0) * cd(0, 1);
+    CHECK(std::fabs(20 * std::log10(std::abs(hm / c1.response(std::exp(cd(0, -2 * kPi * f0 / fs)))))) < 1e-3);
+    const auto x1 = flt.physicalState();
+    flt.setCoefficients(c2);
+    const auto x2 = flt.physicalState();
+    double dx = 0.0, xm = 0.0;
+    for (int i = 0; i < 6; ++i)
+        for (int l = 0; l < 2; ++l) dx = std::max(dx, std::fabs(x1[i][l] - x2[i][l])), xm = std::max(xm, std::fabs(x1[i][l]));
+    std::printf("Modal: physical state carried over to %.1e (relative)\n", dx / xm);
+    CHECK(dx <= 1e-10 * xm);
+    // the physical state equals the FOH state of the dense filter run on the same input
+    lkit::FohDesigner<6> fd;
+    fd.prepare(fs, 1);
+    lkit::FohCoeffs<6> fc;
+    CHECK(fd.discretise(ss, fc));
+    lkit::FohFilter<6> dense;
+    dense.setCoefficients(fc);
+    lkit::ModalFilter<6, 2> m2;
+    m2.setCoefficients(c1);
+    double e = 0.0, s = 0.0;
+    for (int i = 0; i < 2000; ++i) {
+        const double x = std::sin(2 * kPi * 3000.0 * i / fs) + 0.3 * std::sin(2 * kPi * 70.0 * i / fs);
+        dense.tick(lkit::d2{x, x});
+        m2.tick(lkit::d2{x, x});
+        const auto xd = dense.state(), xmod = m2.physicalState();
+        for (int k = 0; k < 6; ++k) e = std::max(e, std::fabs(xd[k][0] - xmod[k][0])), s = std::max(s, std::fabs(xd[k][0]));
+    }
+    std::printf("Modal: physical states vs dense FOH %.1e (relative)\n", e / s);
+    CHECK(e <= 1e-9 * s);
+}
+
 static void testCircuit()
 {
     // The rlc() network built as a netlist: same response as the hand-written state space; then a VCVS
@@ -267,6 +440,8 @@ int main()
     testLstsq();
     testHalfband();
     testFoh();
+    testEigen();
+    testModal();
     testCircuit();
     testTrueBypass();
     testSmoothed();

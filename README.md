@@ -12,6 +12,7 @@ editor layout) stays in the plugin repo. Improve the kit instead of forking it, 
 | Area | Files | What |
 |---|---|---|
 | DSP engine | `core/include/lkit/Foh.h`, `LinAlg.h` | Exact-pole state-space filter with physical states: first-order-hold discretisation (one augmented `expm`), short least-squares output FIR, stereo `d2` tick. Generic in the number of states. |
+| Modal engine | `core/include/lkit/Modal.h`, `LinAlg.h` | The same FOH network in modal form: 2 x 2 blocks (invariant subspaces of eigenvalue pairs, close eigenvalues kept together), one-input recursion, output map + 4 input taps fitted to the analog response times an integer delay, coefficient changes converted through the physical basis. `LinAlg.h` adds real eigenvalues (balance + Hessenberg + QR) and null spaces. |
 | Resampling | `Halfband.h/.cpp` | Linear-phase Kaiser half-band stages for 2x up/down (sample and block APIs, short compile-time kernels), cascaded `Oversampler`. |
 | Plumbing | `Simd.h`, `Biquad.h`, `Smooth.h`, `TrueBypass.h` | 2-lane vectors, bilinear biquad, smoothing that snaps, peak meter, true bypass (bit-exact, latency-compensated, 10 ms crossfade). |
 | Bench | `Bench.h` | Warm-up, best-of-N, per-stage CSV rows in "% of one core per stereo instance" (QA R5). |
