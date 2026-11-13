@@ -112,7 +112,13 @@ public:
         if ((u > 0.0 ? u : 0.0) + knee_ * 0.6931471805599453 <= vc) return 0.0;
         const double v = voltage(y);
         if (v <= vc) return 0.0;
-        const double i = (v - vc) * rInv_;
+        return currentFrom(v - vc);
+    }
+    // The charge current for a rectifier voltage dv > 0 above the network's (a caller that needs voltage() itself,
+    // e.g. to find where conduction starts between two points).
+    double currentFrom(double dv) const noexcept
+    {
+        const double i = dv * rInv_;
         if (iMaxInv_ == 0.0) return i;
         const double r = i * iMaxInv_;
         return i / std::sqrt(1.0 + r * r);

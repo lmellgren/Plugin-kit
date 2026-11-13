@@ -481,6 +481,9 @@ static void testDynamics()
             double i = u > vc ? (u - vc) / 680.0 : 0.0;
             i = i / std::sqrt(1.0 + (i / 0.08) * (i / 0.08));
             worst = std::max(worst, std::fabs(det.current(y, vc) - i) / 1e-3);
+            // the two halves a caller may use on its own (crossings between points): voltage(), then currentFrom()
+            const double dv = det.voltage(y) - vc;
+            worst = std::max(worst, std::fabs((dv > 0.0 ? det.currentFrom(dv) : 0.0) - det.current(y, vc)) / 1e-3);
         }
     CHECK(worst < 1e-6);   // (relative to 1 mA)
 
