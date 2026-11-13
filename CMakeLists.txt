@@ -53,6 +53,12 @@ if(LKIT_BUILD_JUCE)
   target_include_directories(lkit_juce INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/juce/include)
   target_link_libraries(lkit_juce INTERFACE lkit_core)
   add_library(lkit::juce ALIAS lkit_juce)
+  # AUv2: follow the frame the host gives the plugin view (chain layout). Its own target: Objective-C++, and a plugin
+  # that still carries its own copy (Pre 73's kit-candidates) must not get a second one.
+  add_library(lkit_hostframe INTERFACE)
+  target_sources(lkit_hostframe INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/juce/src/HostFrameFollower.mm)
+  target_include_directories(lkit_hostframe INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/juce/include)
+  add_library(lkit::hostframe ALIAS lkit_hostframe)
   add_library(lkit_seam INTERFACE)   # needs lkit_seam_tokens(<target>) on the consumer
   target_sources(lkit_seam INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/juce/src/Seam.cpp)
   target_include_directories(lkit_seam INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/juce/include)

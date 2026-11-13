@@ -234,6 +234,34 @@ static void testSeamComponents()
     auto img = host.createComponentSnapshot(host.getLocalBounds());
     CHECK(img.isValid());
     CHECK(seg.preferredWidth() > 70.0f);
+    {   // Vari-mu P7: the 84 pt encoder with a labelled stepped scale, the GR meter, a section heading that changes
+        lkit::seamui::Encoder::Options o;
+        o.knobH = 84.0f;
+        o.stepLabels = {"a", "b", "c"};
+        lkit::seamui::Encoder e84(*st.getParameter("step"), "Step", "", "", 126.0f, tip, false, o);
+        CHECK(std::fabs(e84.cellHeight() - 114.0f) < 1e-6f && std::fabs(enc.cellHeight() - 120.0f) < 1e-6f);
+        CHECK(e84.text() == lkit::seamui::minusSign(st.getParameter("step")->getCurrentValueAsText()));
+        CHECK(e84.keyPressed(juce::KeyPress(juce::KeyPress::upKey)) && !e84.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+        float gr = 3.04f;
+        lkit::seamui::GrMeter m([&gr] { return gr; });
+        m.poll();
+        CHECK(std::fabs(m.grDb() - 3.04f) < 1e-6f && m.text() == juce::String::charToString(0x2212) + "3.0 dB");
+        gr = 0.0f;
+        m.poll();
+        CHECK(m.text() == "0.0 dB");
+        gr = 35.0f;   // beyond the scale: the needle stops at 20
+        m.poll();
+        CHECK(std::fabs(lkit::seamui::GrMeter::needleAngle(0.0f) - 38.0f) < 1e-6f && std::fabs(lkit::seamui::GrMeter::needleAngle(20.0f) + 38.0f) < 1e-6f);
+        CHECK(std::fabs(lkit::seamui::GrMeter::needleAngle(35.0f) + 38.0f) < 1e-6f && std::fabs(lkit::seamui::GrMeter::needleAngle(10.0f)) < 1e-6f);
+        lkit::seamui::Section sec("Channel A");
+        sec.setHeading("Channel A, Mid");
+        CHECK(sec.heading() == "Channel A, Mid");
+        for (juce::Component* c : std::initializer_list<juce::Component*>{&e84, &m, &sec}) host.addAndMakeVisible(c);
+        e84.setBounds(0, 150, 126, 114);
+        m.setBounds(140, 150, 176, 92);
+        sec.setBounds(0, 0, 400, 141);
+        CHECK(host.createComponentSnapshot(host.getLocalBounds()).isValid());
+    }
 }
 
 static void testEncoderCells()

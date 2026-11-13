@@ -88,12 +88,29 @@ void ValueTip::paint(juce::Graphics& g)
 // ---- Encoder ---------------------------------------------------------------------------------
 Encoder::Encoder(juce::RangedAudioParameter& p, juce::String label, juce::String lo, juce::String hi, float cellW, ValueTip& tip,
                  bool bipolar)
+    : Encoder(p, std::move(label), std::move(lo), std::move(hi), cellW, tip, bipolar, Options{})
+{
+}
+
+Encoder::Encoder(juce::RangedAudioParameter& p, juce::String label, juce::String lo, juce::String hi, float cellW, ValueTip& tip,
+                 bool bipolar, Options opt)
     : param_(p), att_(p, [this](float v) { norm_ = param_.convertTo0to1(v); repaint(); }), label_(std::move(label)),
-      lo_(std::move(lo)), hi_(std::move(hi)), cellW_(cellW), bipolar_(bipolar), tip_(tip)
+      lo_(std::move(lo)), hi_(std::move(hi)), cellW_(cellW), bipolar_(bipolar), opt_(std::move(opt)), tip_(tip)
 {
     att_.sendInitialUpdate();
     setTitle(label_);
     setDescription("Adjustable");
+    setWantsKeyboardFocus(true);
+}
+
+bool Encoder::keyPressed(const juce::KeyPress& k)
+{
+    const int dir = (k.isKeyCode(juce::KeyPress::upKey) || k.isKeyCode(juce::KeyPress::rightKey)) ? 1
+                    : (k.isKeyCode(juce::KeyPress::downKey) || k.isKeyCode(juce::KeyPress::leftKey)) ? -1 : 0;
+    if (dir == 0) return false;
+    const int s = steps();
+    setNorm(norm_ + static_cast<float>(dir) * (s > 0 ? 1.0f / static_cast<float>(s) : (k.getModifiers().isAltDown() ? 0.001f : 0.01f)), false);
+    return true;
 }
 
 int Encoder::steps() const
@@ -121,20 +138,37 @@ void Encoder::paint(juce::Graphics& g)
     g.setFont(font(11.0f, 400));
     g.drawText(label_, juce::Rectangle<float>(0, 0, W, 14), juce::Justification::centred);
 
-    g.setColour(col(colour::inkMuted));
-    const int ticks = steps() > 0 && steps() <= 12 ? steps() + 1 : 11;
-    for (int i = 0; i < ticks; ++i) {
-        const auto pt = at(cx, cy, -135.0f + 270.0f * static_cast<float>(i) / static_cast<float>(ticks - 1), 32.0f);
-        g.fillEllipse(pt.x - 1.1f, pt.y - 1.1f, 2.2f, 2.2f);
+    const int nLab = opt_.stepLabels.size();
+    if (nLab > 1) {   // a stepped scale: a dot and a label per position, the selected one in ink / 600
+        const int sel = juce::roundToInt(norm_ * static_cast<float>(nLab - 1));
+        for (int i = 0; i < nLab; ++i) {
+            const float a = -135.0f + 270.0f * static_cast<float>(i) / static_cast<float>(nLab - 1);
+            const bool on = i == sel;
+            const float rd = on ? 1.4f : 1.1f;
+            const auto pt = at(cx, cy, a, 32.0f);
+            g.setColour(col(on ? colour::ink : colour::inkMuted));
+            g.fillEllipse(pt.x - rd, pt.y - rd, 2 * rd, 2 * rd);
+            g.setFont(font(10.0f, on ? 600 : 400));
+            const auto lp = at(cx, cy, a, 41.0f);
+            const auto just = std::fabs(a) < 20.0f ? juce::Justification::horizontallyCentred : a < 0.0f ? juce::Justification::right : juce::Justification::left;
+            g.drawSingleLineText(minusSign(opt_.stepLabels[i]), juce::roundToInt(lp.x), juce::roundToInt(lp.y + 3.5f), just);
+        }
+    } else {
+        g.setColour(col(colour::inkMuted));
+        const int ticks = steps() > 0 && steps() <= 12 ? steps() + 1 : 11;
+        for (int i = 0; i < ticks; ++i) {
+            const auto pt = at(cx, cy, -135.0f + 270.0f * static_cast<float>(i) / static_cast<float>(ticks - 1), 32.0f);
+            g.fillEllipse(pt.x - 1.1f, pt.y - 1.1f, 2.2f, 2.2f);
+        }
+        g.setFont(font(10.0f, 400));
+        const auto l = at(cx, cy, -135.0f, 41.0f), h = at(cx, cy, 135.0f, 41.0f);
+        g.drawSingleLineText(minusSign(lo_), juce::roundToInt(l.x), juce::roundToInt(l.y + 3.5f), juce::Justification::right);
+        g.drawSingleLineText(minusSign(hi_), juce::roundToInt(h.x), juce::roundToInt(h.y + 3.5f), juce::Justification::left);
     }
-    g.setFont(font(10.0f, 400));
-    const auto l = at(cx, cy, -135.0f, 41.0f), h = at(cx, cy, 135.0f, 41.0f);
-    g.drawSingleLineText(minusSign(lo_), juce::roundToInt(l.x), juce::roundToInt(l.y + 3.5f), juce::Justification::right);
-    g.drawSingleLineText(minusSign(hi_), juce::roundToInt(h.x), juce::roundToInt(h.y + 3.5f), juce::Justification::left);
 
     const float ang = -135.0f + 270.0f * norm_;
     const float from = bipolar_ ? 0.0f : -135.0f;
-    if (std::fabs(ang - from) > 0.5f) {
+    if (nLab <= 1 && std::fabs(ang - from) > 0.5f) {   // (a stepped scale has no arc)
         g.setColour(col(colour::ink2));
         g.strokePath(arc(cx, cy, 26.0f, std::min(from, ang), std::max(from, ang)), juce::PathStrokeType(2.5f));
     }
@@ -149,7 +183,7 @@ void Encoder::paint(juce::Graphics& g)
 
     g.setColour(col(colour::ink));
     g.setFont(font(10.0f, 400));
-    g.drawText(valueText(), juce::Rectangle<float>(0, 16 + 90 + 2, W, 12), juce::Justification::centred);
+    g.drawText(valueText(), juce::Rectangle<float>(0, 16 + opt_.knobH + 2, W, 12), juce::Justification::centred);
 }
 
 void Encoder::mouseDown(const juce::MouseEvent&)
@@ -439,6 +473,63 @@ void Meter::paint(juce::Graphics& g)
     }
     g.setColour(col(colour::ink));
     g.fillRect(0.0f, barsTop + z, 11.0f, 1.0f);
+}
+
+// ---- GrMeter ---------------------------------------------------------------------------------
+GrMeter::GrMeter(Source src) : src_(std::move(src))
+{
+    setTitle("Gain reduction");
+    startTimerHz(30);
+}
+
+void GrMeter::timerCallback()
+{
+    const float v = src_ ? src_() : 0.0f;
+    const float g = std::isfinite(v) ? juce::jlimit(0.0f, 60.0f, v) : 0.0f;
+    if (std::fabs(g - gr_) < 0.005f) return;
+    gr_ = g;
+    repaint();
+}
+
+float GrMeter::needleAngle(float grDb) { return 38.0f - std::min(20.0f, std::max(0.0f, grDb)) / 20.0f * 76.0f; }
+
+juce::String GrMeter::text() const
+{
+    const float r = std::round(gr_ * 10.0f) / 10.0f;
+    return r <= 0.0f ? juce::String("0.0 dB") : juce::String::charToString(0x2212) + juce::String(r, 1) + " dB";
+}
+
+void GrMeter::paint(juce::Graphics& g)
+{
+    const float w = static_cast<float>(getWidth()), h = static_cast<float>(getHeight());
+    const float cx = w / 2.0f, cy = h + 30.0f, r = 74.0f;   // the pivot is below the meter (seamgen gr_meter)
+    g.setColour(col(colour::bg000));
+    g.fillRoundedRectangle(getLocalBounds().toFloat(), radius::radiusMd);
+    juce::Graphics::ScopedSaveState s(g);
+    g.reduceClipRegion(getLocalBounds());
+    g.setColour(col(colour::inkMuted));
+    g.strokePath(arc(cx, cy, r, -38.0f, 38.0f), juce::PathStrokeType(1.0f));
+    for (int d : {20, 10, 7, 5, 3, 1, 0}) {
+        const float a = needleAngle(static_cast<float>(d));
+        const bool major = d == 20 || d == 10 || d == 0;
+        const auto p0 = at(cx, cy, a, r), p1 = at(cx, cy, a, r + (major ? 7.0f : 4.0f));
+        g.setColour(col(colour::ink2));
+        g.drawLine(p0.x, p0.y, p1.x, p1.y, 1.2f);
+        if (major) {
+            const auto lp = at(cx, cy, a, r + 15.0f);
+            g.setFont(font(10.0f, 400));
+            g.drawSingleLineText(juce::String(d), juce::roundToInt(lp.x), juce::roundToInt(lp.y + 3.0f), juce::Justification::horizontallyCentred);
+        }
+    }
+    const auto n = at(cx, cy, needleAngle(gr_), r - 2.0f);
+    g.setColour(col(colour::accent));
+    g.strokePath([&] { juce::Path p; p.startNewSubPath(cx, cy); p.lineTo(n.x, n.y); return p; }(),
+                 juce::PathStrokeType(1.8f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    g.setFont(font(10.0f, 600));
+    g.setColour(col(colour::inkMuted));
+    g.drawSingleLineText("GR", 6, juce::roundToInt(h - 5.0f), juce::Justification::left);
+    g.setColour(col(colour::ink));
+    g.drawSingleLineText(text(), juce::roundToInt(w - 6.0f), juce::roundToInt(h - 5.0f), juce::Justification::right);
 }
 
 // ---- Header ----------------------------------------------------------------------------------

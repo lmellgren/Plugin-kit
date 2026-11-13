@@ -35,10 +35,22 @@ private:
 // 44 pt encoder in a cellW x 90 cell, label above, value below (seamgen enc_c + single_knob).
 // Unipolar draws the arc from the minimum, bipolar from the centre. Range and value text come from
 // the parameter; choice/stepped parameters snap (one step per 16 pt of drag).
+//   knobH: the knob drawing's height (seamgen single_knob h; 90 in Passive EQ, 84 in the Vari-mu rows).
+//   stepLabels: one label per position of a stepped parameter, printed around the scale with the selected one in
+//   ink / 600 (seamgen single_knob(labels, idx)); lo / hi are then not drawn.
 class Encoder final : public juce::Component {
 public:
+    struct Options {
+        float knobH = 90.0f;
+        juce::StringArray stepLabels;
+    };
     Encoder(juce::RangedAudioParameter& p, juce::String label, juce::String lo, juce::String hi, float cellW, ValueTip& tip,
             bool bipolar = false);
+    Encoder(juce::RangedAudioParameter& p, juce::String label, juce::String lo, juce::String hi, float cellW, ValueTip& tip,
+            bool bipolar, Options opt);
+    float cellHeight() const { return 14.0f + 2.0f + opt_.knobH + 2.0f + 12.0f; }
+    juce::String text() const { return valueText(); }   // the value line (tests: QA G4)
+    bool keyPressed(const juce::KeyPress&) override;     // arrows: one step (stepped) or 1 % (Option: 0.1 %)
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
@@ -58,6 +70,7 @@ private:
     juce::String label_, lo_, hi_;
     float cellW_;
     bool bipolar_;
+    Options opt_;
     float norm_ = 0.0f, dragStart_ = 0.0f;
     bool dragging_ = false;
     ValueTip& tip_;
@@ -124,6 +137,13 @@ class Section final : public juce::Component {
 public:
     explicit Section(juce::String title) : title_(std::move(title)) {}
     void paint(juce::Graphics&) override;
+    void setHeading(juce::String t)   // the title bar's text (e.g. a channel row that changes name with the mode)
+    {
+        if (t == title_) return;
+        title_ = std::move(t);
+        repaint();
+    }
+    const juce::String& heading() const { return title_; }
     juce::Rectangle<float> content() const;   // inside the padding (4 10 8 10)
     void setDivider(float x) { dividerX_ = x; repaint(); }
 
@@ -150,6 +170,25 @@ private:
     float level_[2] = {-120, -120}, hold_[2] = {-120, -120};
     int holdTicks_[2] = {0, 0};
     bool clip_ = false, dark_ = false;
+};
+
+// Gain-reduction meter (seamgen gr_meter): a needle in accent over a 20 -> 0 dB scale, 0 at the right; "GR" at the
+// bottom left and the value at the bottom right. The source gives the gain reduction in dB (>= 0) to show now; the
+// needle shows it as it comes (the plugin's own release is the ballistics). Any size; 176 x 92 in the Vari-mu rows.
+class GrMeter final : public juce::Component, private juce::Timer {
+public:
+    using Source = std::function<float()>;
+    explicit GrMeter(Source src);
+    void paint(juce::Graphics&) override;
+    void poll() { timerCallback(); }             // one meter tick now (tests)
+    float grDb() const { return gr_; }           // what the needle shows (tests: QA G4)
+    juce::String text() const;                   // the value text: "0.0 dB", "\u22123.0 dB"
+    static float needleAngle(float grDb);        // degrees from 12 o'clock: 0 dB -> +38, 20 dB -> -38
+
+private:
+    void timerCallback() override;
+    Source src_;
+    float gr_ = 0.0f;
 };
 
 // Header: the on/off square, then the name in heading style. Centred over its bounds (Passive EQ), or left after
