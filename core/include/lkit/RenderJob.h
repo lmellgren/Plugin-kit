@@ -2,7 +2,8 @@
 // Offline render driver for a plugin's DSP core (the counterpart of lkit_measure for our own code;
 // generalised from Passive EQ tools/render). Reads the text job written by lkit.jobs (plugin
 // "render:<exe>"), renders every run with the same protocol as lkit_measure (settle 0.5 s, reset,
-// pre-roll, stimulus + tail) and writes NAME.f32 (interleaved float32) + NAME.json.
+// pre-roll, stimulus + tail) and writes NAME.f32 (interleaved float32) + NAME.json. The stimulus is mono (the same
+// signal to both channels) unless the job has a line "stimulus_channels 2" (interleaved L, R; Vari-mu P8.0).
 //
 // A plugin's render tool is a few lines:
 //   int main(int argc, char** argv) {
@@ -54,7 +55,7 @@ inline int main(int argc, char** argv, const char* name, const Factory& make)
     std::ifstream job(argv[1]);
     const std::string outDir = argv[2];
     double fs = 48000, preroll = 0.5, tail = 2.0;
-    int block = 512;
+    int block = 512, stimCh = 1;
     std::vector<float> stim;
     std::string line;
     while (std::getline(job, line)) {
@@ -65,6 +66,7 @@ inline int main(int argc, char** argv, const char* name, const Factory& make)
         else if (key == "block_size") ss >> block;
         else if (key == "preroll_s") ss >> preroll;
         else if (key == "tail_s") ss >> tail;
+        else if (key == "stimulus_channels") { ss >> stimCh; stimCh = stimCh == 2 ? 2 : 1; }
         else if (key == "stimulus") {
             std::string path;
             ss >> path;
@@ -85,13 +87,15 @@ inline int main(int argc, char** argv, const char* name, const Factory& make)
             Engine e = make(s, fs, block);
             std::vector<float> l(static_cast<size_t>(block)), r(static_cast<size_t>(block)), out;
             float* ch[2] = {l.data(), r.data()};
+            const size_t sc = static_cast<size_t>(stimCh), frames = stim.size() / sc;
             auto run = [&](size_t n, bool signal, bool keep) {
                 for (size_t pos = 0; pos < n; pos += static_cast<size_t>(block)) {
                     const int m = static_cast<int>(std::min<size_t>(static_cast<size_t>(block), n - pos));
                     for (int i = 0; i < m; ++i) {
                         const size_t k = pos + static_cast<size_t>(i);
-                        const float x = (signal && k < stim.size()) ? static_cast<float>(stim[k] * gain) : 0.0f;
-                        l[static_cast<size_t>(i)] = r[static_cast<size_t>(i)] = x;
+                        const bool on = signal && k < frames;
+                        l[static_cast<size_t>(i)] = on ? static_cast<float>(stim[k * sc] * gain) : 0.0f;
+                        r[static_cast<size_t>(i)] = on ? static_cast<float>(stim[k * sc + sc - 1] * gain) : 0.0f;
                     }
                     e.process(ch, m);
                     if (keep)
@@ -101,7 +105,7 @@ inline int main(int argc, char** argv, const char* name, const Factory& make)
             run(static_cast<size_t>(0.5 * fs), false, false);   // settle
             if (e.reset) e.reset();
             run(static_cast<size_t>(preroll * fs), false, false);
-            run(stim.size() + static_cast<size_t>(tail * fs + 0.5), true, true);
+            run(frames + static_cast<size_t>(tail * fs + 0.5), true, true);
             std::ofstream o(outDir + "/" + runName + ".f32", std::ios::binary);
             o.write(reinterpret_cast<const char*>(out.data()), static_cast<std::streamsize>(out.size() * sizeof(float)));
             std::ofstream mj(outDir + "/" + runName + ".json");
@@ -109,7 +113,7 @@ inline int main(int argc, char** argv, const char* name, const Factory& make)
                << "\", \"version\": 0, \"version_string\": \"core\", \"type\": \"core\", \"subtype\": \"core\", "
                   "\"manufacturer\": \"Lmas\"}, \"sample_rate\": "
                << fs << ", \"block_size\": " << block << ", \"channels\": 2, \"frames\": " << out.size() / 2
-               << ", \"stimulus_frames\": " << stim.size() << ", \"gain\": " << gain
+               << ", \"stimulus_frames\": " << frames << ", \"gain\": " << gain
                << ", \"latency_reported_s\": " << e.latency / fs
                << ", \"tail_time_s\": 0, \"readback\": {}, \"readback_after\": {}, \"params_ok\": true}\n";
             std::fprintf(stderr, "ok   %s\n", runName.c_str());
