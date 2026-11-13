@@ -1,6 +1,7 @@
 // Plugin-kit core tests (no JUCE): linear algebra, half-band resampler, FOH engine, true bypass,
 // smoothing, golden files, loudness.
 #include "lkit/Circuit.h"
+#include "lkit/Dynamics.h"
 #include "lkit/Foh.h"
 #include "lkit/Golden.h"
 #include "lkit/Halfband.h"
@@ -450,6 +451,53 @@ static void testGolden()
     fs::remove_all(dir);
 }
 
+// Dynamics.h: the table interpolates a smooth law, the detector equals its formula, the network's discharge and
+// branch charging follow the RC solution (explicit Euler at the loop rate), a topology change keeps vc.
+static void testDynamics()
+{
+    lkit::dyn::CubicTable<513> t;
+    t.build(-3.0, 3.0, [](double x) { return std::exp(0.7 * x) * std::sin(x); });
+    double e = 0.0;
+    for (double x = -3.0; x <= 3.0; x += 0.0137) e = std::max(e, std::fabs(t(x) - std::exp(0.7 * x) * std::sin(x)));
+    CHECK(e < 2e-6);   // Catmull-Rom: third order in the spacing (0.0117 here)
+    CHECK(t(-10.0) == t(-3.0) && t(10.0) == t(3.0));   // clamped ends
+    lkit::dyn::CubicTable<513, 2> t2;                   // two functions on one grid
+    t2.build(-3.0, 3.0, [](double x, double (&o)[2]) { o[0] = std::exp(0.7 * x) * std::sin(x), o[1] = std::cos(x); });
+    double e2 = 0.0;
+    for (double x = -3.0; x <= 3.0; x += 0.0137) {
+        double y[2];
+        t2.eval(x, y);
+        e2 = std::max({e2, std::fabs(y[0] - t(x)) * 1e6, std::fabs(y[1] - std::cos(x))});   // same interpolant; its own error
+    }
+    CHECK(e2 < 2e-6);
+
+    lkit::dyn::Detector det;
+    det.configure(300.0, 27.0, 2.7, 680.0, 0.08);
+    double worst = 0.0;
+    for (double y = -0.5; y <= 0.5; y += 0.0013)
+        for (double vc : {0.0, 1e-4, 3.0, 40.0, 120.0}) {
+            double u = std::fabs(y) * 300.0 - 27.0;
+            u = u > 0 ? u + 2.7 * std::log1p(std::exp(-u / 2.7)) : 2.7 * std::log1p(std::exp(u / 2.7));
+            double i = u > vc ? (u - vc) / 680.0 : 0.0;
+            i = i / std::sqrt(1.0 + (i / 0.08) * (i / 0.08));
+            worst = std::max(worst, std::fabs(det.current(y, vc) - i) / 1e-3);
+        }
+    CHECK(worst < 1e-6);   // (relative to 1 mA)
+
+    lkit::dyn::RcNetwork net;
+    const double dt = 1.0 / 96000.0, r = 2e5, c = 3e-6;
+    net.configure(r, c, nullptr, nullptr, 0, dt);
+    net.reset(10.0);
+    for (int n = 0; n < 96000; ++n) net.step(0.0);
+    CHECK(std::fabs(net.vc() / (10.0 * std::exp(-1.0 / (r * c))) - 1.0) < 1e-4);   // 1 s of discharge
+    const double br[2] = {1e5, 9e4}, bc[2] = {2e-5, 9e-6};
+    net.configure(r, c, br, bc, 2, dt);
+    CHECK(net.vc() == net.branch(0) && net.vc() == net.branch(1));   // a new branch starts at the node
+    net.reset(0.0);
+    for (int n = 0; n < 96000 * 100; ++n) net.step(1e-4);           // constant current: all at i R (tau 6.4 s)
+    CHECK(std::fabs(net.vc() / (1e-4 * r) - 1.0) < 1e-3 && std::fabs(net.branch(1) / net.vc() - 1.0) < 1e-3);
+}
+
 static void testLoudness()
 {
     using namespace lkit::loudness;
@@ -477,6 +525,7 @@ int main()
     testSmoothed();
     testGolden();
     testLoudness();
+    testDynamics();
     if (failures == 0) std::puts("all kit tests passed");
     return failures == 0 ? 0 : 1;
 }
