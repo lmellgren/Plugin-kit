@@ -53,13 +53,16 @@ public:
         const int h = nUp_ - 1;
         d2* x = workUp_.data();
         for (int i = 0; i < n; ++i) x[h + i] = in[i];
-        switch (nHalf_) {   // common stages with compile-time tap counts (8: 110 dB colour stage; 20 / 32: 100 dB at 48 / 44.1 kHz)
+        switch (nHalf_) {   // common stages with compile-time tap counts (8: 110 dB colour stage; 20 / 32: 100 dB at 48 / 44.1 kHz;
+                            // 19 / 31: 96 dB at 48 / 44.1 kHz, Vari-mu P6b)
         case 4: upKernel<4>(x + h, n, out); break;
         case 5: upKernel<5>(x + h, n, out); break;
         case 6: upKernel<6>(x + h, n, out); break;
         case 8: upKernel<8>(x + h, n, out); break;
         case 16: upKernel<16>(x + h, n, out); break;
+        case 19: upKernel<19>(x + h, n, out); break;
         case 20: upKernel<20>(x + h, n, out); break;
+        case 31: upKernel<31>(x + h, n, out); break;
         case 32: upKernel<32>(x + h, n, out); break;
         default: upKernel<0>(x + h, n, out); break;
         }
@@ -76,7 +79,9 @@ public:
         case 6: downKernel<6>(x + h, n, out); break;
         case 8: downKernel<8>(x + h, n, out); break;
         case 16: downKernel<16>(x + h, n, out); break;
+        case 19: downKernel<19>(x + h, n, out); break;
         case 20: downKernel<20>(x + h, n, out); break;
+        case 31: downKernel<31>(x + h, n, out); break;
         case 32: downKernel<32>(x + h, n, out); break;
         default: downKernel<0>(x + h, n, out); break;
         }
