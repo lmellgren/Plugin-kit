@@ -242,6 +242,19 @@ static void testSeamComponents()
         CHECK(std::fabs(e84.cellHeight() - 114.0f) < 1e-6f && std::fabs(enc.cellHeight() - 120.0f) < 1e-6f);
         CHECK(e84.text() == lkit::seamui::minusSign(st.getParameter("step")->getCurrentValueAsText()));
         CHECK(e84.keyPressed(juce::KeyPress(juce::KeyPress::upKey)) && !e84.keyPressed(juce::KeyPress(juce::KeyPress::spaceKey)));
+        {   // assistive technology (Vari-mu P8.1): a slider with the value line; a note after a comma; read-only when disabled
+            auto ah = e84.createAccessibilityHandler();
+            auto* v = ah->getValueInterface();
+            CHECK(ah->getRole() == juce::AccessibilityRole::slider && v != nullptr && v->getCurrentValueAsString() == e84.text() && !v->isReadOnly());
+            e84.setAccessibleNote("follows A");
+            CHECK(v->getCurrentValueAsString() == e84.text() + ", follows A");
+            const float before = e84.norm();
+            e84.setEnabled(false);
+            v->setValue(before > 0.5f ? 0.0 : 1.0);
+            CHECK(v->isReadOnly() && std::fabs(e84.norm() - before) < 1e-6f);
+            e84.setEnabled(true);
+            e84.setAccessibleNote({});
+        }
         float gr = 3.04f;
         lkit::seamui::GrMeter m([&gr] { return gr; });
         m.poll();

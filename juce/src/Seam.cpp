@@ -103,6 +103,39 @@ Encoder::Encoder(juce::RangedAudioParameter& p, juce::String label, juce::String
     setWantsKeyboardFocus(true);
 }
 
+namespace {
+class EncoderValue final : public juce::AccessibilityValueInterface {
+public:
+    explicit EncoderValue(Encoder& e, juce::RangedAudioParameter& p) : e_(e), p_(p) {}
+    bool isReadOnly() const override { return !e_.isEnabled(); }
+    double getCurrentValue() const override { return e_.norm(); }
+    void setValue(double v) override
+    {
+        if (e_.isEnabled()) e_.setNormalised(static_cast<float>(v));
+    }
+    juce::String getCurrentValueAsString() const override { return e_.accessibleText(); }
+    void setValueAsString(const juce::String& t) override
+    {
+        if (e_.isEnabled()) e_.setNormalised(p_.getValueForText(t));
+    }
+    AccessibleValueRange getRange() const override
+    {
+        const int n = p_.getNumSteps();
+        return {{0.0, 1.0}, (n > 1 && n < 200) ? 1.0 / (n - 1) : 0.01};
+    }
+
+private:
+    Encoder& e_;
+    juce::RangedAudioParameter& p_;
+};
+} // namespace
+
+std::unique_ptr<juce::AccessibilityHandler> Encoder::createAccessibilityHandler()
+{
+    return std::make_unique<juce::AccessibilityHandler>(*this, juce::AccessibilityRole::slider, juce::AccessibilityActions{},
+                                                        juce::AccessibilityHandler::Interfaces{std::make_unique<EncoderValue>(*this, param_)});
+}
+
 bool Encoder::keyPressed(const juce::KeyPress& k)
 {
     const int dir = (k.isKeyCode(juce::KeyPress::upKey) || k.isKeyCode(juce::KeyPress::rightKey)) ? 1

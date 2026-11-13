@@ -51,6 +51,13 @@ public:
     float cellHeight() const { return 14.0f + 2.0f + opt_.knobH + 2.0f + 12.0f; }
     juce::String text() const { return valueText(); }   // the value line (tests: QA G4)
     bool keyPressed(const juce::KeyPress&) override;     // arrows: one step (stepped) or 1 % (Option: 0.1 %)
+    // Assistive technology: a slider whose value is the value line, plus a note after a comma when one is set
+    // ("3.0, follows A" for a control that shows another one's value). Read-only while the component is disabled.
+    std::unique_ptr<juce::AccessibilityHandler> createAccessibilityHandler() override;
+    void setAccessibleNote(juce::String note) { note_ = std::move(note); }
+    juce::String accessibleText() const { return note_.isEmpty() ? valueText() : valueText() + ", " + note_; }
+    float norm() const { return norm_; }
+    void setNormalised(float v) { setNorm(v, false); }   // a complete gesture (assistive technology)
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
@@ -67,7 +74,7 @@ private:
     juce::String valueText() const;
     juce::RangedAudioParameter& param_;
     juce::ParameterAttachment att_;
-    juce::String label_, lo_, hi_;
+    juce::String label_, lo_, hi_, note_;
     float cellW_;
     bool bipolar_;
     Options opt_;
